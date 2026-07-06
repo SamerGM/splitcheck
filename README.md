@@ -1,0 +1,2 @@
+# splitcheck
+Bill splitting app
