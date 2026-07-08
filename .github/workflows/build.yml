@@ -38,7 +38,10 @@ jobs:
         run: flutter pub get
 
       - name: Build AAB
-        run: flutter build appbundle --release --verbose 2>&1 | tail -100
+        run: flutter build appbundle --release
+
+      - name: Find AAB
+        run: find . -name "*.aab" 2>/dev/null
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
