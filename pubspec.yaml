@@ -26,7 +26,7 @@ dependencies:
   # speech_to_text: ^7.0.0  # Temporarily disabled - v1 embedding issue
 
   # Share results via WhatsApp / clipboard / SMS
-  share_plus: ^12.0.2
+  # share_plus: ^12.0.2  # Temporarily disabled
 
   # Localization — English + Arabic RTL support
   flutter_localizations:

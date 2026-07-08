@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:share_plus/share_plus.dart';
+// import 'package:share_plus/share_plus.dart'; // Temporarily disabled
 
 import '../../core/models/models.dart';
 import '../../core/utils/currency.dart';
@@ -101,7 +101,7 @@ class ResultCard extends ConsumerWidget {
             _Btn(
               label: s.share, icon: Icons.share_rounded,
               accentDark: accentDark, textMuted: textMuted,
-              onTap: () => Share.share(
+              onTap: () async { /* Share.share(
                 _buildShareText(s),
                 subject: 'Bill Split — ${bill.merchant}'),
             ),
