@@ -155,6 +155,47 @@ class FlowController extends Notifier<List<ChatMessage>> {
       await _bot(s.cantParseItem, ms: 300);
       return;
     }
+    // Check for unknown names first
+    final List<String> unknownNames = [];
+    for (final p in parsed) {
+      for (final name in p.personNames) {
+        final match = _draftState.people.firstWhere(
+          (person) => person.name.toLowerCase() == name.toLowerCase() ||
+                      person.name.toLowerCase().contains(name.toLowerCase()),
+          orElse: () => const Person(id: '', name: '', color: Color(0xFF000000)),
+        );
+        if (match.id.isEmpty && !unknownNames.contains(name)) {
+          unknownNames.add(name);
+        }
+      }
+    }
+
+    // If unknown names found, ask user
+    if (unknownNames.isNotEmpty) {
+      final existingNames = _draftState.people.map((p) => p.name).join(', ');
+      for (final unknownName in unknownNames) {
+        await _bot(
+          '"$unknownName" is not in the list ($existingNames).\nAdd "$unknownName" to the list?',
+          chips: [
+            QuickChip(label: 'Yes, add $unknownName', onTap: () async {
+              final newPerson = Person(
+                id: _uuid.v4(),
+                name: unknownName,
+                color: kPersonColors[_draftState.people.length % kPersonColors.length],
+              );
+              _draft.setPeople([..._draftState.people, newPerson]);
+              await _bot('"$unknownName" added ✓', ms: 200);
+            }),
+            QuickChip(label: 'No, keep list', onTap: () async {
+              await _bot('OK, "\$unknownName" will be treated as shared.', ms: 200);
+            }),
+          ],
+          ms: 300,
+        );
+      }
+      return;
+    }
+
     for (final p in parsed) {
       final personIds = <String>[];
       for (final name in p.personNames) {

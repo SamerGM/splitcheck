@@ -117,6 +117,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final showScan = step == FlowStep.items;
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton.small(
+        onPressed: () => ref.read(chatProvider.notifier).reset(),
+        backgroundColor: isDark ? AppTheme.darkAccent : AppTheme.lightAccent,
+        tooltip: language == 'ar' ? 'فاتورة جديدة' : 'New bill',
+        child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+      ),
       body: SafeArea(child: Column(children: [
         _TopBar(
           step: step,
