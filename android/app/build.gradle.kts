@@ -13,7 +13,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.splitcheck.app"
+    namespace = "com.samer.splitcheck"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -23,7 +23,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.splitcheck.app"
+        applicationId = "com.samer.splitcheck"
         minSdk = 21
         targetSdk = 35
         versionCode = flutter.versionCode
