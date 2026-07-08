@@ -37,6 +37,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Find v1 plugins
+        run: grep -r "fun registerWith" ~/.pub-cache/ 2>/dev/null | grep -v "speech_to_text\|share_plus" | head -20
+
       - name: Build AAB
         run: flutter build appbundle --release
 
