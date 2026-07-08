@@ -7,8 +7,9 @@ class HistoryService {
   static const _box = 'splitcheck_history';
 
   Future<void> init() async {
-    await Hive.initFlutter();
-    await Hive.openBox<String>(_box);
+    if (!Hive.isBoxOpen(_box)) {
+      await Hive.openBox<String>(_box);
+    }
   }
 
   Future<void> save(Bill bill) async {

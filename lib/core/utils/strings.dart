@@ -1,0 +1,123 @@
+// lib/core/utils/strings.dart
+class S {
+  final bool isAr;
+  const S(this.isAr);
+
+  String get appName => 'Split Check';
+
+  // Step 1
+  String get welcome => isAr ? '👋 أهلاً بك في Split Check!' : '👋 Welcome to Split Check!';
+  String get step1Question => isAr ? 'الخطوة 1 — اكتب اسماء من سيتم تقسيم الفاتورة بينهم' : 'Step 1 — Who\'s splitting the bill?';
+  String get typeOrSayNames => isAr ? 'اكتب أو قل جميع الأسماء دفعة واحدة.' : 'Type or say all names at once.';
+  String get namesExample => isAr ? 'مثال: أحمد، سارة، عمر' : 'Example: Ahmed, Sara, Omar';
+  String gotIt(String names) => isAr ? 'تم — $names' : 'Got it — $names';
+  String get isCorrect => isAr ? 'هل هذا صحيح؟' : 'Is this correct?';
+  String get yes => isAr ? 'نعم ✓' : 'Yes ✓';
+  String get noReenter => isAr ? 'لا، أعد الإدخال' : 'No, re-enter';
+  String get peopleConfirmed => isAr ? 'تم تأكيد الأشخاص ✓' : 'People confirmed ✓';
+  String get namesNotFound => isAr ? 'لم أتمكن من العثور على أسماء. حاول كتابتها هكذا: أحمد، سارة، عمر' : 'I couldn\'t find any names. Try typing like: Ahmed, Sara, Omar';
+  String get typeNamesAgain => isAr ? 'اكتب جميع الأسماء مرة أخرى.' : 'Type all names again.';
+  String get addMoreNames => isAr ? 'أضف المزيد من الأسماء' : 'Add more names';
+
+  // Step 2
+  String people(String names) => isAr ? 'الأشخاص: $names' : 'People: $names';
+  String get step2Title => isAr ? 'الخطوة 2 — أضف العناصر.' : 'Step 2 — Add items.';
+  String get itemFormat => isAr ? 'الصيغة: اسم العنصر · السعر · من' : 'Format: item name · price · who';
+  String get itemExample1 => isAr ? 'برجر 35 أحمد ← لأحمد وحده' : 'Burger 35 Ahmed → Ahmed alone';
+  String get itemExample2 => isAr ? 'بيتزا 90 أحمد, سارة ← تقسيم بينهما' : 'Pizza 90 Ahmed, Sara → split between them';
+  String get itemExample3 => isAr ? 'قهوة 18 مُشترك ← للجميع' : 'Coffee 18 shared → all';
+  String get scanTip => isAr ? 'اضغط 📷 لمسح الفاتورة.' : 'Tap 📷 to scan receipt.';
+  String get sayDoneWhenFinished => isAr ? 'قل "تم" عند الانتهاء.' : 'Say "done" when finished.';
+  String get done => isAr ? 'تم ✓' : 'Done ✓';
+  String get addMore => isAr ? 'أضف المزيد' : 'Add more';
+  String get addItemFirst => isAr ? 'أضف عنصراً واحداً على الأقل أولاً.' : 'Add at least one item first.';
+  String get cantParseItem => isAr ? 'لم أفهم ذلك. حاول: برجر 35 أحمد' : 'Couldn\'t parse that. Try: Burger 35 Ahmed';
+  String runningTotal(String amount) => isAr ? 'اجمالي الفاتورة: $amount' : 'Running total: $amount';
+  String get shared => isAr ? 'مُشترك' : 'shared';
+  String get added => isAr ? 'تمت الإضافة:' : 'Added:';
+
+  // Edit
+  String get hereAreItems => isAr ? 'إليك جميع عناصرك:' : 'Here are all your items:';
+  String subtotal(String amount) => isAr ? 'المجموع الفرعي: $amount' : 'Subtotal: $amount';
+  String get wantToEdit => isAr ? 'هل تريد تعديل شيء؟' : 'Want to edit anything?';
+  String get editExample1 => isAr ? 'تعديل برجر 40 ← تغيير السعر' : 'edit Burger 40 ← change price';
+  String get editExample2 => isAr ? 'تعديل بيتزا أحمد سارة ← تغيير الأشخاص' : 'edit Pizza Ahmed Sara ← change who';
+  String get editExample3 => isAr ? 'حذف بطاطس ← إزالة العنصر' : 'remove Fries ← remove item';
+  String get allGood => isAr ? 'كل شيء صحيح ✓' : 'All good ✓';
+  String itemNotFound(String item) => isAr ? 'لم أجد "$item"' : 'Couldn\'t find "$item"';
+  String itemRemoved(String item) => isAr ? 'تم حذف "$item" ✓' : '"$item" removed ✓';
+  String itemUpdated(String item) => isAr ? 'تم تحديث "$item" ✓' : '"$item" updated ✓';
+  String get anythingElse => isAr ? 'هل تريد تعديل شيء آخر؟' : 'Anything else to edit?';
+  String get editCantUnderstand => isAr
+      ? 'لم أفهم ذلك.\n\nحاول:\n  تعديل برجر 40\n  تعديل بيتزا أحمد سارة\n  حذف قهوة'
+      : 'I didn\'t understand that.\n\nTry:\n  edit Burger 40\n  edit Pizza Ahmed Sara\n  remove Coffee';
+
+  // Step 3 VAT
+  String get step3Title => isAr ? 'الخطوة 3 — ضريبة القيمة المضافة' : 'Step 3 — VAT / Tax';
+  String get quickOptionOrCustom => isAr ? 'اختر خياراً سريعاً أو اكتب نسبة مخصصة:' : 'Tap a quick option or type a custom percentage:';
+  String get noVat => isAr ? 'لا ضريبة ✓' : 'No VAT ✓';
+  String vatApplied(double n) => isAr ? 'ضريبة ${n.toStringAsFixed(0)}% ✓' : 'VAT ${n.toStringAsFixed(0)}% ✓';
+  String get custom => isAr ? 'قيمة اخري' : 'Custom';
+  String get typeVat => isAr ? 'اكتب نسبة الضريبة (مثال: 7):' : 'Type your VAT percentage (e.g. 7):';
+  String vatConfirm(double n) => isAr ? 'ضريبة ${n.toStringAsFixed(1)}% — هل هذا صحيح؟' : 'VAT: ${n.toStringAsFixed(1)}% — correct?';
+  String get change => isAr ? 'تغيير' : 'Change';
+  String get typeValidNumber => isAr ? 'يرجى إدخال رقم مثل 5، أو اختر خياراً سريعاً.' : 'Please enter a number like 5, or tap a quick option above.';
+
+  // Step 4 Service
+  String get step4Title => isAr ? 'الخطوة 4 — رسوم الخدمة' : 'Step 4 — Service charge';
+  String get noService => isAr ? 'لا رسوم خدمة ✓' : 'No service charge ✓';
+  String serviceApplied(double n) => isAr ? 'خدمة ${n.toStringAsFixed(0)}% ✓' : 'Service ${n.toStringAsFixed(0)}% ✓';
+  String get typeService => isAr ? 'اكتب نسبة رسوم الخدمة (مثال: 10):' : 'Type your service charge percentage (e.g. 10):';
+  String serviceConfirm(double n) => isAr ? 'رسوم الخدمة ${n.toStringAsFixed(1)}% — هل هذا صحيح؟' : 'Service: ${n.toStringAsFixed(1)}% — correct?';
+
+  // Step 5 Tip
+  String get step5Title => isAr ? 'الخطوة 5 — الإكرامية (اختياري)' : 'Step 5 — Tip (optional)';
+  String get noTip => isAr ? 'لا إكرامية ✓' : 'No tip ✓';
+  String tipApplied(double n) => isAr ? 'إكرامية ${n.toStringAsFixed(0)}% ✓' : 'Tip ${n.toStringAsFixed(0)}% ✓';
+  String get typeTip => isAr ? 'اكتب نسبة الإكرامية (مثال: 10):' : 'Type your tip percentage (e.g. 10):';
+  String tipConfirm(double n) => isAr ? 'الإكرامية ${n.toStringAsFixed(1)}% — هل هذا صحيح؟' : 'Tip: ${n.toStringAsFixed(1)}% — correct?';
+
+  // Step 6 Final confirm
+  String get finalConfirmTitle => isAr ? 'التأكيد النهائي:' : 'Final confirmation:';
+  String get peopleLabel => isAr ? 'الأشخاص:' : 'People:';
+  String itemsCount(int n) => isAr ? 'العناصر: $n عناصر' : 'Items: $n items';
+  String get vatNone => isAr ? 'الضريبة:    لا يوجد' : 'VAT:      None';
+  String get serviceNone => isAr ? 'الخدمة:     لا يوجد' : 'Service:  None';
+  String get tipNone => isAr ? 'الإكرامية:  لا يوجد' : 'Tip:      None';
+  String vatLine(double pct, String amt) => isAr ? 'الضريبة ${pct.toStringAsFixed(0)}%:    $amt' : 'VAT ${pct.toStringAsFixed(0)}%:      $amt';
+  String serviceLine(double pct, String amt) => isAr ? 'الخدمة ${pct.toStringAsFixed(0)}%:    $amt' : 'Service ${pct.toStringAsFixed(0)}%:  $amt';
+  String tipLine(double pct, String amt) => isAr ? 'الإكرامية ${pct.toStringAsFixed(0)}%: $amt' : 'Tip ${pct.toStringAsFixed(0)}%:      $amt';
+  String grandTotalLine(String amt) => isAr ? 'المجموع الكلي: $amt' : 'Grand total: $amt';
+  String get allGoodQuestion => isAr ? 'كل شيء صحيح؟' : 'All good?';
+  String get calculate => isAr ? 'نعم — احسب!' : 'Yes — calculate! →';
+  String get changeVat => isAr ? 'تغيير الضريبة' : 'Change VAT';
+  String get changeService => isAr ? 'تغيير الخدمة' : 'Change service';
+  String get changeTip => isAr ? 'تغيير الإكرامية' : 'Change tip';
+  String get tapCalculate => isAr ? 'اضغط "نعم — احسب!" أعلاه، أو اختر ما تريد تغييره.' : 'Tap "Yes — calculate!" above, or choose what to change.';
+
+  // Step 7 Result
+  String finalSplit(String merchant) => isAr ? 'إليك التقسيم النهائي${merchant.isNotEmpty ? " لـ $merchant" : ""}:' : 'Here\'s the final split${merchant.isNotEmpty ? " for $merchant" : ""}:';
+  String get grandTotal => isAr ? 'المجموع الكلي' : 'Grand total';
+  String get perPerson => isAr ? 'لكل شخص' : 'Per person';
+  String get copy => isAr ? 'نسخ' : 'Copy';
+  String get share => isAr ? 'مشاركة' : 'Share';
+  String get newBill => isAr ? 'فاتورة جديدة' : 'New bill';
+  String get billDone => isAr ? 'تم! اضغط "فاتورة جديدة" للبدء من جديد.' : 'Bill is done! Tap "New bill" to start again.';
+  String get copied => isAr ? 'تم النسخ!' : 'Copied!';
+
+  // OCR
+  String get scanning => isAr ? '📷 جاري مسح الفاتورة…' : '📷 Scanning receipt…';
+  String get arabicReceiptDetected => isAr ? 'تم اكتشاف فاتورة عربية. يرجى إضافة العناصر بالكتابة أو الصوت.' : 'Arabic receipt detected. Please add items by typing or voice.';
+  String get addItemsManually => isAr ? 'أضف العناصر يدوياً' : 'Add items manually';
+  String scannedItems(int n) => isAr ? 'تم المسح ✓ $n عناصر:' : 'Scanned ✓ $n items:';
+  String get cantReadReceipt => isAr ? 'لم أتمكن من قراءة أي عناصر. جرب صورة أوضح.' : 'Couldn\'t read any items. Try a clearer photo.';
+  String get whoOrderedWhat => isAr ? 'أخبرني من طلب ماذا أو اضغط "تقسيم بالتساوي".' : 'Tell me who ordered what or tap "Split equally".';
+  String get splitEqually => isAr ? 'تقسيم بالتساوي' : 'Split equally →';
+  String get addMoreItems => isAr ? 'أضف المزيد من العناصر' : 'Add more items';
+  String get cantScanReceipt => isAr ? 'لم أتمكن من مسح الفاتورة. جرب صورة أوضح أو أضف العناصر يدوياً.' : 'Couldn\'t scan the receipt. Try a clearer photo or add items manually.';
+  String get whatElse => isAr ? 'ماذا تريد إضافة؟' : 'What else?';
+
+  // Share
+  String shareHeader(String merchant) => '🧾 $merchant';
+  String get shareFooter => isAr ? 'تم التقسيم عبر Split Check' : 'Split via Split Check';
+}
