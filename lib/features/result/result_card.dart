@@ -1,6 +1,11 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/models.dart';
 import '../../core/utils/currency.dart';
@@ -12,8 +17,9 @@ import '../flow/flow_controller.dart';
 class ResultCard extends ConsumerWidget {
   final SplitResult result;
   final Bill bill;
+  final _shareKey = GlobalKey();
 
-  const ResultCard({super.key, required this.result, required this.bill});
+  ResultCard({super.key, required this.result, required this.bill});
 
   String _buildShareText(S s) {
     final buf = StringBuffer();
@@ -35,6 +41,28 @@ class ResultCard extends ConsumerWidget {
     return buf.toString();
   }
 
+  Future<void> _shareAsImage(BuildContext context, S s) async {
+    try {
+      final boundary = _shareKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) return;
+      final bytes = byteData.buffer.asUint8List();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/splitcheck_result.png');
+      await file.writeAsBytes(bytes);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: s.shareFooter,
+        subject: 'Bill Split',
+      );
+    } catch (e) {
+      // fallback to text share
+      await Share.share(_buildShareText(s), subject: 'Bill Split');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark     = Theme.of(context).brightness == Brightness.dark;
@@ -44,69 +72,98 @@ class ResultCard extends ConsumerWidget {
     final textHint   = isDark ? AppTheme.darkTextHint   : AppTheme.lightTextHint;
     final textMuted  = isDark ? AppTheme.darkTextMuted  : AppTheme.lightTextMuted;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F1D30) : const Color(0xFFEEF4FB),
-        border: Border.all(color: accent.withValues(alpha: 0.2)),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
-              border: Border.all(color: accent.withValues(alpha: 0.22)),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(s.grandTotal, style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w700, color: accent)),
-                Text(fmtAmount(result.grandTotal, bill.currency),
-                  style: TextStyle(
-                    fontSize: 21, fontWeight: FontWeight.w800, color: accent)),
-              ],
+    return Column(
+      children: [
+        RepaintBoundary(
+          key: _shareKey,
+          child: Container(
+            color: isDark ? const Color(0xFF0A1628) : Colors.white,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F1D30) : const Color(0xFFEEF4FB),
+                border: Border.all(color: accent.withValues(alpha: 0.2)),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header with logo
+                  Row(children: [
+                    Icon(Icons.receipt_long, color: accent, size: 18),
+                    const SizedBox(width: 6),
+                    Text('SplitCheck', style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w800, color: accent)),
+                    const Spacer(),
+                    if (bill.merchant.isNotEmpty)
+                      Text(bill.merchant, style: TextStyle(
+                        fontSize: 12, color: textMuted)),
+                  ]),
+                  const SizedBox(height: 10),
+                  // Grand total
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.1),
+                      border: Border.all(color: accent.withValues(alpha: 0.22)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(s.grandTotal, style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700, color: accent)),
+                        Text(fmtAmount(result.grandTotal, bill.currency),
+                          style: TextStyle(
+                            fontSize: 21, fontWeight: FontWeight.w800, color: accent)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(s.perPerson, style: TextStyle(
+                    fontSize: 10, fontWeight: FontWeight.w700,
+                    color: textHint, letterSpacing: .7)),
+                  const SizedBox(height: 8),
+                  ...result.personResults.map((pr) =>
+                    _PersonBlock(pr: pr, bill: bill, isDark: isDark, s: s)),
+                  // Footer
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text('Split via SplitCheck', style: TextStyle(
+                      fontSize: 10, color: textMuted, fontStyle: FontStyle.italic)),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          Text(s.perPerson, style: TextStyle(
-            fontSize: 10, fontWeight: FontWeight.w700,
-            color: textHint, letterSpacing: .7)),
-          const SizedBox(height: 8),
-          ...result.personResults.map((pr) =>
-            _PersonBlock(pr: pr, bill: bill, isDark: isDark, s: s)),
-          const SizedBox(height: 8),
-          Row(children: [
-            _Btn(
-              label: s.copy, icon: Icons.copy_rounded,
-              primary: true, accentDark: accentDark, textMuted: textMuted,
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: _buildShareText(s)));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(s.copied),
-                    duration: const Duration(seconds: 2)));
-              },
-            ),
-            const SizedBox(width: 7),
-            _Btn(
-              label: s.share, icon: Icons.share_rounded,
-              accentDark: accentDark, textMuted: textMuted,
-              onTap: () async {},
-            ),
-            const SizedBox(width: 7),
-            _Btn(
-              label: s.newBill, icon: Icons.refresh_rounded,
-              accentDark: accentDark, textMuted: textMuted,
-              onTap: () => ref.read(chatProvider.notifier).reset(),
-            ),
-          ]),
-        ],
-      ),
+        ),
+        const SizedBox(height: 4),
+        Row(children: [
+          _Btn(
+            label: s.copy, icon: Icons.copy_rounded,
+            primary: true, accentDark: accentDark, textMuted: textMuted,
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: _buildShareText(s)));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(s.copied),
+                  duration: const Duration(seconds: 2)));
+            },
+          ),
+          const SizedBox(width: 7),
+          _Btn(
+            label: s.share, icon: Icons.share_rounded,
+            accentDark: accentDark, textMuted: textMuted,
+            onTap: () => _shareAsImage(context, s),
+          ),
+          const SizedBox(width: 7),
+          _Btn(
+            label: s.newBill, icon: Icons.refresh_rounded,
+            accentDark: accentDark, textMuted: textMuted,
+            onTap: () => ref.read(chatProvider.notifier).reset(),
+          ),
+        ]),
+      ],
     );
   }
 }
