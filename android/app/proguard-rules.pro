@@ -8,3 +8,7 @@
 
 # Keep Hive
 -keep class com.hive.** { *; }
+
+# Flutter Play Store Split Application
+-keep class com.google.android.play.core.** { *; }
+-dontwarn com.google.android.play.core.**
