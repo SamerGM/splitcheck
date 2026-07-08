@@ -8,7 +8,6 @@ import 'package:gap/gap.dart';
 import '../../core/services/providers.dart';
 import '../../core/services/settings_provider.dart';
 import '../../core/services/voice_service.dart';
-import '../../core/utils/currency.dart';
 import '../../shared/theme/app_theme.dart';
 import 'chat_message.dart';
 import 'flow_controller.dart';
@@ -155,8 +154,6 @@ class _TopBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
     final accentColor  = isDark ? AppTheme.darkAccent  : AppTheme.lightAccent;
-    final textColor    = isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final mutedColor   = isDark ? AppTheme.darkTextMuted   : AppTheme.lightTextMuted;
 
     return Container(
       color: surfaceColor,
@@ -275,34 +272,7 @@ class _TopBar extends ConsumerWidget {
       ]),
     );
   }
-}
 
-class _PillBtn extends StatelessWidget {
-  final String label;
-  final Color color, bg, border;
-  final VoidCallback onTap;
-
-  const _PillBtn({
-    required this.label, required this.color,
-    required this.bg, required this.border, required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: bg,
-          border: Border.all(color: border),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Text(label, style: TextStyle(
-          fontSize: 11, fontWeight: FontWeight.w700, color: color)),
-      ),
-    );
-  }
 }
 
 // ── BUBBLE ────────────────────────────────────────────────────────────────────
@@ -487,13 +457,13 @@ class _InputBar extends StatelessWidget {
     final cardColor    = isDark ? AppTheme.darkCard    : AppTheme.lightCard;
     final accentColor  = isDark ? AppTheme.darkAccent  : AppTheme.lightAccent;
     final accentDark   = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
-    final textColor    = isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
     final hintColor    = isDark ? AppTheme.darkTextHint    : AppTheme.lightTextHint;
-    final mutedColor   = isDark ? AppTheme.darkTextMuted   : AppTheme.lightTextMuted;
     final borderColor  = isDark
         ? Colors.white.withValues(alpha: 0.1)
         : Colors.black.withValues(alpha: 0.1);
 
+    final textColor    = isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
+    final mutedColor   = isDark ? AppTheme.darkTextMuted   : AppTheme.lightTextMuted;
     return Container(
       color: surfaceColor,
       padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),

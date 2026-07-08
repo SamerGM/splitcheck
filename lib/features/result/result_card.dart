@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// import 'package:share_plus/share_plus.dart'; // Temporarily disabled
 
 import '../../core/models/models.dart';
 import '../../core/utils/currency.dart';
@@ -56,7 +55,6 @@ class ResultCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Grand total
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
@@ -76,15 +74,12 @@ class ResultCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 12),
-
           Text(s.perPerson, style: TextStyle(
             fontSize: 10, fontWeight: FontWeight.w700,
             color: textHint, letterSpacing: .7)),
           const SizedBox(height: 8),
-
           ...result.personResults.map((pr) =>
             _PersonBlock(pr: pr, bill: bill, isDark: isDark, s: s)),
-
           const SizedBox(height: 8),
           Row(children: [
             _Btn(
@@ -101,9 +96,7 @@ class ResultCard extends ConsumerWidget {
             _Btn(
               label: s.share, icon: Icons.share_rounded,
               accentDark: accentDark, textMuted: textMuted,
-              onTap: () async { /* Share.share(
-                _buildShareText(s),
-                subject: 'Bill Split — ${bill.merchant}'),
+              onTap: () async {},
             ),
             const SizedBox(width: 7),
             _Btn(

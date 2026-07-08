@@ -2,9 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'voice_service.dart';
 import 'ocr_service.dart';
 import 'history_service.dart';
-import 'split_calculator.dart';
 import '../models/models.dart';
-import '../utils/currency.dart';
 
 final voiceServiceProvider   = Provider<VoiceService>((ref) => VoiceService());
 final ocrServiceProvider     = Provider<OcrService>((ref) => OcrService());
