@@ -38,7 +38,7 @@ jobs:
         run: flutter pub get
 
       - name: Build AAB
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --verbose 2>&1 | tail -100
 
       - name: Upload AAB
         uses: actions/upload-artifact@v4
