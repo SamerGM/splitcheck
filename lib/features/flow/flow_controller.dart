@@ -154,9 +154,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       await _bot(s.pleaseEnterValidNumber, ms: 200);
       return;
     }
-    _totalItems = n;
-    _currentItemIndex = 0;
-    _draft.clearItems();
+    _totalItems = _currentItemIndex + n;
     _askItemName();
   }
 
@@ -183,16 +181,8 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _pendingItemPrice = fmtAmount(price, _curr);
     _setStep(FlowStep.itemWho);
 
-    final people = _draftState.people;
     await _bot(
       _s.itemWhoPrompt(_pendingItemName, _pendingItemPrice),
-      chips: [
-        ...people.map((p) => QuickChip(
-          label: p.name,
-          onTap: () => _selectPersonForItem(p.id),
-        )),
-        QuickChip(label: _s.everyone, onTap: () => _selectEveryoneForItem()),
-      ],
       ms: 300,
     );
   }

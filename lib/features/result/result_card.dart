@@ -27,21 +27,26 @@ class ResultCard extends ConsumerWidget {
     buf.writeln('─' * 24);
     for (final pr in result.personResults) {
       buf.writeln('${pr.person.name}: ${fmtAmount(pr.total, bill.currency)}');
+      final myItems = bill.items.where((it) =>
+        it.personIds.isEmpty
+            ? bill.people.map((p) => p.id).contains(pr.person.id)
+            : it.personIds.contains(pr.person.id)).toList();
+      for (final it in myItems) {
+        final assigned = it.personIds.isEmpty ? bill.people.length : it.personIds.length;
+        buf.writeln('  ${it.name}: ${fmtAmount(it.price / assigned, bill.currency)}');
+      }
+      if (pr.vatShare > 0) buf.writeln('  VAT: ${fmtAmount(pr.vatShare, bill.currency)}');
+      if (pr.serviceShare > 0) buf.writeln('  Service: ${fmtAmount(pr.serviceShare, bill.currency)}');
+      if (pr.tipShare > 0) buf.writeln('  Tip: ${fmtAmount(pr.tipShare, bill.currency)}');
     }
     buf.writeln('─' * 24);
     buf.writeln('${s.grandTotal}: ${fmtAmount(result.grandTotal, bill.currency)}');
-    if (bill.extras.vatPct > 0)
-      buf.writeln('VAT ${bill.extras.vatPct}%: ${fmtAmount(result.vatAmount, bill.currency)}');
-    if (bill.extras.servicePct > 0)
-      buf.writeln('Service ${bill.extras.servicePct}%: ${fmtAmount(result.serviceAmount, bill.currency)}');
-    if (bill.extras.tipPct > 0)
-      buf.writeln('Tip ${bill.extras.tipPct}%: ${fmtAmount(result.tipAmount, bill.currency)}');
     buf.writeln();
     buf.writeln(s.shareFooter);
     return buf.toString();
   }
 
-  Future<void> _shareAsImage(BuildContext context, S s) async {
+  Future<void> _shareAsImage(BuildContext context, S s, bool isDark, String language) async {
     try {
       final boundary = _shareKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
@@ -58,87 +63,195 @@ class ResultCard extends ConsumerWidget {
         subject: 'Bill Split',
       );
     } catch (e) {
-      // fallback to text share
       await Share.share(_buildShareText(s), subject: 'Bill Split');
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
-    final s          = ref.watch(stringsProvider);
-    final accent     = isDark ? AppTheme.darkAccent     : AppTheme.lightAccent;
-    final accentDark = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
-    final textHint   = isDark ? AppTheme.darkTextHint   : AppTheme.lightTextHint;
-    final textMuted  = isDark ? AppTheme.darkTextMuted  : AppTheme.lightTextMuted;
+    final isDark      = Theme.of(context).brightness == Brightness.dark;
+    final s           = ref.watch(stringsProvider);
+    final language    = ref.watch(languageProvider);
+    final accent      = isDark ? AppTheme.darkAccent     : AppTheme.lightAccent;
+    final accentDark  = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
+    final textHint    = isDark ? AppTheme.darkTextHint   : AppTheme.lightTextHint;
+    final textMuted   = isDark ? AppTheme.darkTextMuted  : AppTheme.lightTextMuted;
+    final bgColor     = isDark ? const Color(0xFF0A1628) : Colors.white;
+    final cardColor   = isDark ? const Color(0xFF0F1D30) : const Color(0xFFEEF4FB);
 
     return Column(
       children: [
+        // ── COMPACT SHARE CARD (captured for image) ─────────────────────────
         RepaintBoundary(
           key: _shareKey,
           child: Container(
-            color: isDark ? const Color(0xFF0A1628) : Colors.white,
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F1D30) : const Color(0xFFEEF4FB),
-                border: Border.all(color: accent.withValues(alpha: 0.2)),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header with logo
-                  Row(children: [
-                    Icon(Icons.receipt_long, color: accent, size: 18),
-                    const SizedBox(width: 6),
-                    Text('SplitCheck', style: TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w800, color: accent)),
-                    const Spacer(),
-                    if (bill.merchant.isNotEmpty)
-                      Text(bill.merchant, style: TextStyle(
-                        fontSize: 12, color: textMuted)),
-                  ]),
-                  const SizedBox(height: 10),
-                  // Grand total
+            color: bgColor,
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with logo + toggles
+                Row(children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    width: 28, height: 28,
                     decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.1),
-                      border: Border.all(color: accent.withValues(alpha: 0.22)),
-                      borderRadius: BorderRadius.circular(10),
+                      color: accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(s.grandTotal, style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w700, color: accent)),
-                        Text(fmtAmount(result.grandTotal, bill.currency),
-                          style: TextStyle(
-                            fontSize: 21, fontWeight: FontWeight.w800, color: accent)),
-                      ],
+                    child: Icon(Icons.receipt_long, color: accent, size: 15),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('SplitCheck', style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w800, color: accent)),
+                  const Spacer(),
+                  // Language toggle
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white12 : Colors.black12,
+                      borderRadius: BorderRadius.circular(14),
                     ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: language == 'en' ? accent : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text('EN', style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w700,
+                          color: language == 'en' ? Colors.white : (isDark ? Colors.white54 : Colors.black45))),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: language == 'ar' ? accent : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text('AR', style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w700,
+                          color: language == 'ar' ? Colors.white : (isDark ? Colors.white54 : Colors.black45))),
+                      ),
+                    ]),
                   ),
-                  const SizedBox(height: 12),
-                  Text(s.perPerson, style: TextStyle(
-                    fontSize: 10, fontWeight: FontWeight.w700,
-                    color: textHint, letterSpacing: .7)),
-                  const SizedBox(height: 8),
-                  ...result.personResults.map((pr) =>
-                    _PersonBlock(pr: pr, bill: bill, isDark: isDark, s: s)),
-                  // Footer
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text('Split via SplitCheck', style: TextStyle(
-                      fontSize: 10, color: textMuted, fontStyle: FontStyle.italic)),
+                  const SizedBox(width: 6),
+                  // Theme toggle
+                  Container(
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white12 : Colors.black12,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: !isDark ? accent : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(Icons.wb_sunny, size: 12, color: !isDark ? Colors.white : (isDark ? Colors.white54 : Colors.black45)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isDark ? accent : Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(Icons.nightlight_round, size: 12, color: isDark ? Colors.white : Colors.black45),
+                      ),
+                    ]),
                   ),
-                ],
-              ),
+                ]),
+                const SizedBox(height: 12),
+                // Compact card
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: cardColor,
+                    border: Border.all(color: accent.withValues(alpha: 0.2)),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Grand total
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.1),
+                          border: Border.all(color: accent.withValues(alpha: 0.22)),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(s.grandTotal, style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700, color: accent)),
+                            FittedBox(fit: BoxFit.scaleDown,
+                              child: Text(fmtAmount(result.grandTotal, bill.currency),
+                                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: accent))),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(s.perPerson, style: TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w700,
+                        color: textHint, letterSpacing: .7)),
+                      const SizedBox(height: 8),
+                      // Compact: name + total only
+                      ...result.personResults.map((pr) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(children: [
+                          CircleAvatar(
+                            radius: 13,
+                            backgroundColor: pr.person.color.withValues(alpha: 0.15),
+                            child: Text(pr.person.name.characters.first.toUpperCase(),
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                                color: pr.person.color)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(pr.person.name, style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600,
+                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
+                          const Spacer(),
+                          FittedBox(fit: BoxFit.scaleDown,
+                            child: Text(fmtAmount(pr.total, bill.currency),
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: accent))),
+                        ]),
+                      )),
+                      const SizedBox(height: 4),
+                      Center(child: Text(s.shareFooter, style: TextStyle(
+                        fontSize: 10, color: textMuted, fontStyle: FontStyle.italic))),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
+
+        // ── FULL BREAKDOWN (visible in app only) ─────────────────────────────
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: cardColor,
+            border: Border.all(color: accent.withValues(alpha: 0.2)),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(s.perPerson, style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700,
+                color: textHint, letterSpacing: .7)),
+              const SizedBox(height: 8),
+              ...result.personResults.map((pr) =>
+                _PersonBlock(pr: pr, bill: bill, isDark: isDark, s: s)),
+            ],
+          ),
+        ),
+
+        // ── BUTTONS ───────────────────────────────────────────────────────────
         Row(children: [
           _Btn(
             label: s.copy, icon: Icons.copy_rounded,
@@ -154,7 +267,7 @@ class ResultCard extends ConsumerWidget {
           _Btn(
             label: s.share, icon: Icons.share_rounded,
             accentDark: accentDark, textMuted: textMuted,
-            onTap: () => _shareAsImage(context, s),
+            onTap: () => _shareAsImage(context, s, isDark, language),
           ),
           const SizedBox(width: 7),
           _Btn(
@@ -216,12 +329,10 @@ class _PersonBlock extends StatelessWidget {
             fontSize: 13, fontWeight: FontWeight.w600,
             color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
           const Spacer(),
-          FittedBox(
-            fit: BoxFit.scaleDown,
+          FittedBox(fit: BoxFit.scaleDown,
             child: Text(fmtAmount(pr.total, bill.currency),
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800,
-                color: accent)),
-          ),
+                color: accent))),
         ]),
         ...myItems.map((it) {
           final assigned = it.personIds.isEmpty
