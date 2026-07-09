@@ -117,12 +117,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final showScan = step == FlowStep.items;
 
     return Scaffold(
-      floatingActionButton: FloatingActionButton.small(
-        onPressed: () => ref.read(chatProvider.notifier).reset(),
-        backgroundColor: isDark ? AppTheme.darkAccent : AppTheme.lightAccent,
-        tooltip: language == 'ar' ? 'فاتورة جديدة' : 'New bill',
-        child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
-      ),
+
       body: SafeArea(child: Column(children: [
         _TopBar(
           step: step,
@@ -153,6 +148,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ctrl: _ctrl, isRec: _isRec, liveText: _live,
           showScan: showScan,
           onSend: _send, onVoice: _toggleVoice, onScan: _pickImage,
+          onRestart: () => ref.read(chatProvider.notifier).reset(),
         ),
       ])),
     );
@@ -466,12 +462,12 @@ class _InputBar extends StatelessWidget {
   final TextEditingController ctrl;
   final bool isRec, showScan;
   final String liveText;
-  final VoidCallback onSend, onVoice, onScan;
+  final VoidCallback onSend, onVoice, onScan, onRestart;
 
   const _InputBar({
     required this.ctrl, required this.isRec, required this.liveText,
     required this.showScan, required this.onSend,
-    required this.onVoice, required this.onScan,
+    required this.onVoice, required this.onScan, required this.onRestart,
   });
 
   @override
@@ -559,9 +555,19 @@ class _InputBar extends StatelessWidget {
                 : borderColor,
           ),
           const Gap(7),
-          _IBtn(
-            onTap: onSend, icon: Icons.send_rounded,
-            color: Colors.white, bg: accentDark, border: accentDark,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _IBtn(
+                onTap: onRestart, icon: Icons.refresh_rounded,
+                color: Colors.white, bg: accentColor, border: accentColor,
+              ),
+              const Gap(6),
+              _IBtn(
+                onTap: onSend, icon: Icons.send_rounded,
+                color: Colors.white, bg: accentDark, border: accentDark,
+              ),
+            ],
           ),
         ]),
       ]),

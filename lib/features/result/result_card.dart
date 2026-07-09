@@ -216,9 +216,12 @@ class _PersonBlock extends StatelessWidget {
             fontSize: 13, fontWeight: FontWeight.w600,
             color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
           const Spacer(),
-          Text(fmtAmount(pr.total, bill.currency),
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800,
-              color: accent)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(fmtAmount(pr.total, bill.currency),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800,
+                color: accent)),
+          ),
         ]),
         ...myItems.map((it) {
           final assigned = it.personIds.isEmpty

@@ -84,6 +84,21 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> _handlePeople(String text) async {
     final s = _s;
+    final low = text.toLowerCase().trim();
+
+    // Handle confirmation if people already set
+    if (_draftState.people.isNotEmpty) {
+      if (low == 'yes' || low == 'y' || low == 'نعم' || low == 'ok' || low == 'correct') {
+        _confirmPeople();
+        return;
+      }
+      if (low == 'no' || low == 'n' || low == 'لا' || low == 're-enter' || low == 'edit') {
+        await _bot(s.typeNamesAgain, ms: 200);
+        _draft.setPeople([]);
+        return;
+      }
+    }
+
     final names = parsePeopleNames(text);
     if (names.isEmpty) {
       await _bot(s.namesNotFound, ms: 300);
