@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:gap/gap.dart';
 
+import '../../core/models/models.dart';
 import '../../core/services/providers.dart';
 import '../../core/services/settings_provider.dart';
 import '../../core/services/voice_service.dart';
@@ -114,7 +115,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.listen(chatProvider,    (_, __) => _scrollToBottom());
     ref.listen(isTypingProvider,(_, __) => _scrollToBottom());
 
-    final showScan = step == FlowStep.items;
+    final showScan = step == FlowStep.itemName || step == FlowStep.itemPrice || step == FlowStep.itemWho || step == FlowStep.itemCount;
 
     return Scaffold(
 
@@ -144,6 +145,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             },
           ),
         ),
+        if (step == FlowStep.itemWho)
+          _NameSelector(
+            people: ref.watch(billDraftProvider).people,
+            isDark: isDark,
+            onConfirm: (ids) => ref.read(chatProvider.notifier).confirmSelectedPeople(ids),
+          ),
         _InputBar(
           ctrl: _ctrl, isRec: _isRec, liveText: _live,
           showScan: showScan,
@@ -597,6 +604,106 @@ class _IBtn extends StatelessWidget {
         ),
         child: Icon(icon, color: color, size: 17),
       ),
+    );
+  }
+}
+
+// ── NAME SELECTOR ─────────────────────────────────────────────────────────────
+class _NameSelector extends StatefulWidget {
+  final List<Person> people;
+  final bool isDark;
+  final void Function(List<String> ids) onConfirm;
+  const _NameSelector({required this.people, required this.isDark, required this.onConfirm});
+  @override State<_NameSelector> createState() => _NameSelectorState();
+}
+
+class _NameSelectorState extends State<_NameSelector> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
+    final bg = widget.isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final border = widget.isDark ? Colors.white12 : Colors.black12;
+
+    return Container(
+      color: bg,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            ...widget.people.map((p) {
+              final pid = p.id;
+              final selected = _selected.contains(pid);
+              return GestureDetector(
+                onTap: () => setState(() {
+                  if (selected) _selected.remove(pid);
+                  else _selected.add(pid);
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected ? accent : Colors.transparent,
+                    border: Border.all(color: selected ? accent : border),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(p.name, style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : (widget.isDark ? Colors.white70 : Colors.black54),
+                  )),
+                ),
+              );
+            }),
+            GestureDetector(
+              onTap: () => setState(() {
+                final allIds = widget.people.map((p) => p.id).toList();
+                if (_selected.length == widget.people.length) {
+                  _selected.clear();
+                } else {
+                  _selected.addAll(allIds);
+                }
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _selected.length == widget.people.length ? Colors.green : Colors.transparent,
+                  border: Border.all(color: _selected.length == widget.people.length ? Colors.green : border),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('Everyone', style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600,
+                  color: _selected.length == widget.people.length ? Colors.white : (widget.isDark ? Colors.white70 : Colors.black54),
+                )),
+              ),
+            ),
+          ]),
+        ),
+        if (_selected.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: SizedBox(
+              width: double.infinity,
+              child: GestureDetector(
+                onTap: () => widget.onConfirm(_selected.toList()),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Text('Confirm ✓',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                ),
+              ),
+            ),
+          ),
+      ]),
     );
   }
 }

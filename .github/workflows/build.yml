@@ -41,11 +41,9 @@ jobs:
         run: |
           VERSION=$(grep "^version:" pubspec.yaml | sed 's/version: //')
           BASE=$(echo $VERSION | cut -d'+' -f1)
-          CODE=$(echo $VERSION | cut -d'+' -f2)
-          NEW_CODE=$((CODE + 1))
-          sed -i "s/version: $VERSION/version: $BASE+$NEW_CODE/" pubspec.yaml
+          NEW_CODE=${{ github.run_number }}
+          sed -i "s/version: .*/version: $BASE+$NEW_CODE/" pubspec.yaml
           echo "New version: $BASE+$NEW_CODE"
-
       - name: Get dependencies
         run: flutter pub get
 

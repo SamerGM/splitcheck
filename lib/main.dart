@@ -59,17 +59,9 @@ class _AppInitState extends ConsumerState<_AppInit> {
   }
 
   Future<void> _load() async {
-    try {
-      print('Loading theme...');
-      await ref.read(themeProvider.notifier).init();
-      print('Loading language...');
-      await ref.read(languageProvider.notifier).init();
-      print('Ready!');
-      if (mounted) setState(() => _ready = true);
-    } catch (e, st) {
-      print('INIT ERROR: \$e');
-      print(st);
-    }
+    await ref.read(themeProvider.notifier).init();
+    await ref.read(languageProvider.notifier).init();
+    if (mounted) setState(() => _ready = true);
   }
 
   @override

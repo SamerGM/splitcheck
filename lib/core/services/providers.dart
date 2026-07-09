@@ -62,6 +62,17 @@ class BillDraftNotifier extends Notifier<BillDraft> {
   void reset() => state = BillDraft.empty();
 }
 
+// Item building state
+final currentItemNameProvider  = NotifierProvider<_StrNotifier, String>(() => _StrNotifier(''));
+final currentItemPriceProvider = NotifierProvider<_StrNotifier, String>(() => _StrNotifier(''));
+final totalItemCountProvider   = NotifierProvider<_IntNotifier, int>(() => _IntNotifier());
+final currentItemIndexProvider = NotifierProvider<_IntNotifier, int>(() => _IntNotifier());
+
+class _IntNotifier extends Notifier<int> {
+  @override int build() => 0;
+  set value(int v) => state = v;
+}
+
 final billDraftProvider = NotifierProvider<BillDraftNotifier, BillDraft>(
   BillDraftNotifier.new,
 );
@@ -87,4 +98,4 @@ final historyProvider = AsyncNotifierProvider<HistoryNotifier, List<Bill>>(
   HistoryNotifier.new,
 );
 
-enum FlowStep { people, items, vat, service, tip, confirm, result }
+enum FlowStep { people, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, confirm, result }

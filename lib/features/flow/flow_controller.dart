@@ -9,8 +9,8 @@ import '../../core/services/parser_service.dart';
 import '../../core/services/edit_parser.dart';
 import '../../core/services/split_calculator.dart';
 import '../../core/services/settings_provider.dart';
-import '../../core/utils/strings.dart';
 import '../../core/utils/currency.dart';
+import '../../core/utils/strings.dart';
 import 'chat_message.dart';
 
 final chatProvider = NotifierProvider<FlowController, List<ChatMessage>>(
@@ -19,25 +19,30 @@ final chatProvider = NotifierProvider<FlowController, List<ChatMessage>>(
 
 class FlowController extends Notifier<List<ChatMessage>> {
   static const _uuid = Uuid();
-  bool _editMode = false;
+
+  // Item being built
+  String _pendingItemName  = '';
+  String _pendingItemPrice = '';
+  int    _totalItems       = 0;
+  int    _currentItemIndex = 0;
+
+  // Edit state
+  int    _editingItemIndex = -1;
+  String _editSubStep      = ''; // 'name', 'price', 'who'
 
   @override
   List<ChatMessage> build() {
     Future.microtask(() async {
-      try {
-        await _start();
-      } catch (e) {
-        // ignore startup errors
-      }
+      try { await _start(); } catch (e) {}
     });
     return [];
   }
 
-  BillDraftNotifier get _draft => ref.read(billDraftProvider.notifier);
-  BillDraft get _draftState    => ref.read(billDraftProvider);
-  FlowStep get _step           => ref.read(flowStepProvider);
-  String get _curr             => ref.read(currencyProvider);
-  S get _s                     => ref.read(stringsProvider);
+  BillDraftNotifier get _draft      => ref.read(billDraftProvider.notifier);
+  BillDraft         get _draftState => ref.read(billDraftProvider);
+  FlowStep          get _step       => ref.read(flowStepProvider);
+  String            get _curr       => ref.read(currencyProvider);
+  S                 get _s          => ref.read(stringsProvider);
 
   void _setStep(FlowStep s) => ref.read(flowStepProvider.notifier).value = s;
 
@@ -55,38 +60,40 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> handleInput(String text) async {
     if (text.trim().isEmpty) return;
     _addUser(text);
-    if (_editMode) { _handleEditCommand(text); return; }
+
     switch (_step) {
-      case FlowStep.people:  _handlePeople(text);  break;
-      case FlowStep.items:   _handleItems(text);   break;
-      case FlowStep.vat:     _handleVat(text, requireConfirm: true); break;
-      case FlowStep.service: _handleService(text, requireConfirm: true); break;
-      case FlowStep.tip:     _handleTip(text, requireConfirm: true); break;
-      case FlowStep.confirm: _handleConfirm(text); break;
+      case FlowStep.people:     _handlePeople(text);    break;
+      case FlowStep.itemCount:  _handleItemCount(text); break;
+      case FlowStep.itemName:   _handleItemName(text);  break;
+      case FlowStep.itemPrice:  _handleItemPrice(text); break;
+      case FlowStep.itemWho:    break; // handled by chips
+      case FlowStep.itemSummary: break; // handled by chips
+      case FlowStep.itemEdit:   _handleItemEditStep(text); break;
+      case FlowStep.editMenu:   break; // handled by chips
+      case FlowStep.vat:        _handleVat(text, requireConfirm: true); break;
+      case FlowStep.service:    _handleService(text, requireConfirm: true); break;
+      case FlowStep.tip:        _handleTip(text, requireConfirm: true); break;
+      case FlowStep.confirm:    _handleConfirm(text); break;
       case FlowStep.result:
         _bot(_s.billDone, ms: 200);
         break;
     }
   }
 
+  // ═══════════════════ STEP 1 — PEOPLE ═════════════════════════════════════
+
   Future<void> _start() async {
     _setStep(FlowStep.people);
     final s = _s;
     await _bot(
-      '${s.welcome}\n\n'
-      '${s.step1Question}\n\n'
-      '${s.typeOrSayNames}\n'
-      '${s.namesExample}',
+      '${s.welcome}\n\n${s.step1Question}\n\n${s.typeOrSayNames}\n${s.namesExample}',
     );
   }
-
-  // ═══════════════════ STEP 1 — PEOPLE ═════════════════════════════════════
 
   Future<void> _handlePeople(String text) async {
     final s = _s;
     final low = text.toLowerCase().trim();
 
-    // Handle confirmation if people already set
     if (_draftState.people.isNotEmpty) {
       if (low == 'yes' || low == 'y' || low == 'نعم' || low == 'ok' || low == 'correct') {
         _confirmPeople();
@@ -104,14 +111,22 @@ class FlowController extends Notifier<List<ChatMessage>> {
       await _bot(s.namesNotFound, ms: 300);
       return;
     }
-    _draft.setPeople(names.asMap().entries.map((e) => Person(
+
+    // Add to existing people if any
+    final existing = _draftState.people;
+    final allNames = [...existing.map((p) => p.name), ...names];
+    final uniqueNames = allNames.toSet().toList();
+
+    _draft.setPeople(uniqueNames.asMap().entries.map((e) => Person(
       id: _uuid.v4(),
       name: e.value,
       color: kPersonColors[e.key % kPersonColors.length],
     )).toList());
-    await _bot('${s.gotIt(names.join(', '))}\n\n${s.isCorrect}', chips: [
+
+    await _bot('${s.gotIt(uniqueNames.join(', '))}\n\n${s.isCorrect}', chips: [
       QuickChip(label: s.yes, onTap: () => _confirmPeople()),
       QuickChip(label: s.noReenter, onTap: () async {
+        _draft.setPeople([]);
         await _bot(s.typeNamesAgain, ms: 200);
       }),
       QuickChip(label: s.addMoreNames, onTap: () async {
@@ -122,239 +137,296 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> _confirmPeople() async {
     await _bot(_s.peopleConfirmed, ms: 250);
-    _beginItems();
+    _askItemCount();
   }
 
-  // ═══════════════════ STEP 2 — ITEMS ══════════════════════════════════════
+  // ═══════════════════ STEP 2 — ITEM COUNT ══════════════════════════════════
 
-  Future<void> _beginItems() async {
-    _setStep(FlowStep.items);
+  Future<void> _askItemCount() async {
+    _setStep(FlowStep.itemCount);
+    await _bot(_s.howManyItems, ms: 300);
+  }
+
+  Future<void> _handleItemCount(String text) async {
     final s = _s;
-    final names = _draftState.people.map((p) => p.name).join(', ');
+    final n = int.tryParse(text.trim());
+    if (n == null || n <= 0) {
+      await _bot(s.pleaseEnterValidNumber, ms: 200);
+      return;
+    }
+    _totalItems = n;
+    _currentItemIndex = 0;
+    _draft.clearItems();
+    _askItemName();
+  }
+
+  // ═══════════════════ STEP 3 — ITEMS ONE BY ONE ═══════════════════════════
+
+  Future<void> _askItemName() async {
+    _setStep(FlowStep.itemName);
+    await _bot(_s.itemNamePrompt(_currentItemIndex + 1, _totalItems), ms: 300);
+  }
+
+  Future<void> _handleItemName(String text) async {
+    _pendingItemName = text.trim();
+    _setStep(FlowStep.itemPrice);
+    await _bot(_s.itemPricePrompt(_pendingItemName), ms: 300);
+  }
+
+  Future<void> _handleItemPrice(String text) async {
+    final s = _s;
+    final price = double.tryParse(text.trim().replaceAll(',', '.'));
+    if (price == null || price <= 0) {
+      await _bot(s.pleaseEnterValidNumber, ms: 200);
+      return;
+    }
+    _pendingItemPrice = fmtAmount(price, _curr);
+    _setStep(FlowStep.itemWho);
+
+    final people = _draftState.people;
     await _bot(
-      '${s.people(names)}\n\n'
-      '${s.step2Title}\n\n'
-      '${s.itemFormat}\n\n'
-      'Examples:\n'
-      '  ${s.itemExample1}\n'
-      '  ${s.itemExample2}\n'
-      '  ${s.itemExample3}\n\n'
-      '${s.scanTip}\n'
-      '${s.sayDoneWhenFinished}',
+      _s.itemWhoPrompt(_pendingItemName, _pendingItemPrice),
       chips: [
-        QuickChip(label: s.done, onTap: () {
-          if (_draftState.items.isEmpty) {
-            _bot(s.addItemFirst, ms: 200);
-            return;
-          }
-          _addUser(s.done);
-          _showEditScreen();
-        }),
+        ...people.map((p) => QuickChip(
+          label: p.name,
+          onTap: () => _selectPersonForItem(p.id),
+        )),
+        QuickChip(label: _s.everyone, onTap: () => _selectEveryoneForItem()),
       ],
+      ms: 300,
     );
   }
 
-  Future<void> _handleItems(String text) async {
-    final s = _s;
-    final low = text.toLowerCase().trim();
-    if (low == 'done' || low == 'next' || low == 'finish' || low == 'تم') {
-      if (_draftState.items.isEmpty) {
-        await _bot(s.addItemFirst, ms: 200);
-        return;
-      }
-      _showEditScreen();
-      return;
-    }
-    final parsed = parseItems(text, knownPeople: _draftState.people);
-    if (parsed.isEmpty) {
-      await _bot(s.cantParseItem, ms: 300);
-      return;
-    }
-    // Check for unknown names first
-    final List<String> unknownNames = [];
-    for (final p in parsed) {
-      for (final name in p.personNames) {
-        final match = _draftState.people.firstWhere(
-          (person) => person.name.toLowerCase() == name.toLowerCase() ||
-                      person.name.toLowerCase().contains(name.toLowerCase()),
-          orElse: () => const Person(id: '', name: '', color: Color(0xFF000000)),
-        );
-        if (match.id.isEmpty && !unknownNames.contains(name)) {
-          unknownNames.add(name);
-        }
-      }
-    }
+  // Name selection is handled via widget in chat_screen
+  // But we also need chip-based selection here
+  final List<String> _selectedPersonIds = [];
 
-    // If unknown names found, ask user
-    if (unknownNames.isNotEmpty) {
-      final existingNames = _draftState.people.map((p) => p.name).join(', ');
-      for (final unknownName in unknownNames) {
-        await _bot(
-          '"$unknownName" is not in the list ($existingNames).\nAdd "$unknownName" to the list?',
-          chips: [
-            QuickChip(label: 'Yes, add $unknownName', onTap: () async {
-              final newPerson = Person(
-                id: _uuid.v4(),
-                name: unknownName,
-                color: kPersonColors[_draftState.people.length % kPersonColors.length],
-              );
-              _draft.setPeople([..._draftState.people, newPerson]);
-              await _bot('"$unknownName" added ✓', ms: 200);
-            }),
-            QuickChip(label: 'No, keep list', onTap: () async {
-              await _bot('OK, "\$unknownName" will be treated as shared.', ms: 200);
-            }),
-          ],
-          ms: 300,
-        );
-      }
-      return;
+  void _selectPersonForItem(String personId) {
+    if (_selectedPersonIds.contains(personId)) {
+      _selectedPersonIds.remove(personId);
+    } else {
+      _selectedPersonIds.add(personId);
     }
-
-    for (final p in parsed) {
-      final personIds = <String>[];
-      for (final name in p.personNames) {
-        final match = _draftState.people.firstWhere(
-          (person) => person.name.toLowerCase() == name.toLowerCase() ||
-                      person.name.toLowerCase().contains(name.toLowerCase()),
-          orElse: () => const Person(id: '', name: '', color: Color(0xFF000000)),
-        );
-        if (match.id.isNotEmpty && !personIds.contains(match.id)) {
-          personIds.add(match.id);
-        }
-      }
-      _draft.addItem(BillItem(id: _uuid.v4(), name: p.name, price: p.price, personIds: personIds));
-    }
-    final summary = parsed.map((p) {
-      final who = p.personNames.isEmpty ? s.shared : p.personNames.join(' + ');
-      return '  ${p.name}  ${fmtAmount(p.price, _curr)}  → $who';
-    }).join('\n');
-    final runTotal = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
-    await _bot(
-      'Added:\n$summary\n\n${s.runningTotal(fmtAmount(runTotal, _curr))}',
-      chips: [
-        QuickChip(label: s.addMore, onTap: () async => _bot(s.whatElse, ms: 200)),
-        QuickChip(label: s.done, onTap: () { _addUser(s.done); _showEditScreen(); }),
-      ],
-    );
   }
 
-  // ═══════════════════ EDIT SCREEN ═════════════════════════════════════════
-
-  Future<void> _showEditScreen() async {
-    _editMode = true;
-    final s = _s;
-    final total = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
-    await _bot(
-      '${s.hereAreItems}\n\n${_itemListText()}'
-      '${s.subtotal(fmtAmount(total, _curr))}\n\n'
-      '${s.wantToEdit}\n\n'
-      '  ${s.editExample1}\n'
-      '  ${s.editExample2}\n'
-      '  ${s.editExample3}\n\n'
-      'Or tap "${s.allGood}" to continue.',
-      chips: [
-        QuickChip(label: s.allGood, onTap: () {
-          _editMode = false;
-          _addUser(s.allGood);
-          _askVat();
-        }),
-      ],
-    );
+  Future<void> _selectEveryoneForItem() async {
+    final personIds = _draftState.people.map((p) => p.id).toList();
+    _confirmWhoOrdered(personIds);
   }
 
-  String _itemListText() => _itemListTextFrom(_draftState.items);
+  Future<void> confirmSelectedPeople(List<String> personIds) async {
+    if (personIds.isEmpty) {
+      await _bot(_s.selectAtLeastOne, ms: 200);
+      return;
+    }
+    _confirmWhoOrdered(personIds);
+  }
 
-  String _itemListTextFrom(List<BillItem> items) {
+  Future<void> _confirmWhoOrdered(List<String> personIds) async {
+    final price = double.tryParse(
+      _pendingItemPrice.replaceAll('\$', '').trim()
+    ) ?? 0.0;
+
+    _draft.addItem(BillItem(
+      id: _uuid.v4(),
+      name: _pendingItemName,
+      price: price,
+      personIds: personIds,
+    ));
+
+    final who = personIds.isEmpty
+        ? _s.shared
+        : personIds.map((id) =>
+            _draftState.people.firstWhere((p) => p.id == id,
+              orElse: () => const Person(id: '', name: '?', color: Color(0xFF000000))).name
+          ).join(', ');
+
+    await _bot(
+      _s.itemConfirmed(_pendingItemName, _pendingItemPrice, who),
+      ms: 200,
+    );
+
+    _currentItemIndex++;
+    _pendingItemName  = '';
+    _pendingItemPrice = '';
+
+    if (_currentItemIndex < _totalItems) {
+      _askItemName();
+    } else {
+      _showItemSummary();
+    }
+  }
+
+  // ═══════════════════ ITEM SUMMARY ════════════════════════════════════════
+
+  Future<void> _showItemSummary() async {
+    _setStep(FlowStep.itemSummary);
     final s = _s;
-    if (items.isEmpty) return '  (no items)\n';
-    return items.asMap().entries.map((e) {
+    final subtotal = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
+
+    final itemList = _draftState.items.asMap().entries.map((e) {
       final it = e.value;
       final who = it.personIds.isEmpty
           ? s.shared
-          : it.personIds.map((pid) =>
-              _draftState.people.firstWhere((p) => p.id == pid,
+          : it.personIds.map((id) =>
+              _draftState.people.firstWhere((p) => p.id == id,
                 orElse: () => const Person(id: '', name: '?', color: Color(0xFF000000))).name
-            ).join(' + ');
-      return '  ${e.key + 1}. ${it.name}  ${fmtAmount(it.price, _curr)}  → $who';
-    }).join('\n') + '\n';
+            ).join(', ');
+      return '${e.key + 1}. ${it.name}  ${fmtAmount(it.price, _curr)}  → $who';
+    }).join('\n');
+
+    await _bot(
+      '${s.allItemsAdded(fmtAmount(subtotal, _curr))}\n\n$itemList',
+      chips: [
+        QuickChip(label: s.looksGood, onTap: () {
+          _addUser(s.looksGood);
+          _askVat();
+        }),
+        QuickChip(label: s.addMoreItemsBtn, onTap: () async {
+          await _bot(s.howManyMoreItems, ms: 200);
+          _setStep(FlowStep.itemCount);
+        }),
+        QuickChip(label: s.editExistingItem, onTap: () => _showItemEditList()),
+      ],
+      ms: 300,
+    );
   }
 
-  Future<void> _handleEditCommand(String text) async {
-    final s = _s;
-    final low = text.toLowerCase().trim();
-    if (low == 'all good' || low == 'done' || low == 'ok' || low == 'next' ||
-        low == 'continue' || low == 'كل شيء صحيح' || low == 'تم') {
-      _editMode = false;
-      _askVat();
-      return;
-    }
-    final cmd = parseEditCommand(text);
-    if (cmd == null) {
-      await _bot(
-        s.editCantUnderstand,
-        chips: [
-          QuickChip(label: s.allGood, onTap: () {
-            _editMode = false;
-            _addUser(s.allGood);
-            _askVat();
-          }),
-        ],
-        ms: 300,
-      );
-      return;
-    }
-    final keyword = cmd.itemKeyword.toLowerCase();
-    final items = List<BillItem>.from(_draftState.items);
-    final idx = items.indexWhere((it) => it.name.toLowerCase().contains(keyword));
-    if (idx == -1) {
-      await _bot(s.itemNotFound(cmd.itemKeyword), ms: 300);
-      return;
-    }
-    final item = items[idx];
-    if (cmd.action == EditAction.remove) {
-      items.removeAt(idx);
-      ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
-      final total = items.fold(0.0, (sum, i) => sum + i.price);
-      await _bot(
-        '${s.itemRemoved(item.name)}\n\n${_itemListTextFrom(items)}'
-        '${s.subtotal(fmtAmount(total, _curr))}\n\n${s.anythingElse}',
-        chips: [QuickChip(label: s.allGood, onTap: () { _editMode = false; _addUser(s.allGood); _askVat(); })],
-        ms: 300,
-      );
-      return;
-    }
-    double newPrice = item.price;
-    List<String> newPersonIds = List.from(item.personIds);
-    if (cmd.newPrice != null) newPrice = cmd.newPrice!;
-    if (cmd.newPersons.isNotEmpty) {
-      newPersonIds = [];
-      for (final name in cmd.newPersons) {
-        final match = _draftState.people.firstWhere(
-          (p) => p.name.toLowerCase() == name.toLowerCase() ||
-                 p.name.toLowerCase().contains(name.toLowerCase()),
-          orElse: () => const Person(id: '', name: '', color: Color(0xFF000000)),
-        );
-        if (match.id.isNotEmpty) newPersonIds.add(match.id);
-      }
-    }
-    items[idx] = BillItem(id: item.id, name: item.name, price: newPrice, personIds: newPersonIds);
-    ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
-    final who = newPersonIds.isEmpty
-        ? s.shared
-        : newPersonIds.map((pid) =>
-            _draftState.people.firstWhere((p) => p.id == pid,
-              orElse: () => const Person(id: '', name: '?', color: Color(0xFF000000))).name
-          ).join(' + ');
-    final total = items.fold(0.0, (sum, i) => sum + i.price);
+  // ═══════════════════ ITEM EDIT ════════════════════════════════════════════
+
+  Future<void> _showItemEditList() async {
+    _setStep(FlowStep.itemEdit);
+    final items = _draftState.items;
     await _bot(
-      '${s.itemUpdated(item.name)}\n'
-      '  Price: ${fmtAmount(newPrice, _curr)}\n'
-      '  Who: $who\n\n'
-      '${_itemListTextFrom(items)}'
-      '${s.subtotal(fmtAmount(total, _curr))}\n\n${s.anythingElse}',
-      chips: [QuickChip(label: s.allGood, onTap: () { _editMode = false; _addUser(s.allGood); _askVat(); })],
-      ms: 300,
+      _s.whichItemToEdit,
+      chips: items.asMap().entries.map((e) =>
+        QuickChip(
+          label: '${e.key + 1}. ${e.value.name} ${fmtAmount(e.value.price, _curr)}',
+          onTap: () => _showItemEditOptions(e.key),
+        )
+      ).toList(),
+      ms: 200,
+    );
+  }
+
+  Future<void> _showItemEditOptions(int index) async {
+    _editingItemIndex = index;
+    final item = _draftState.items[index];
+    final s = _s;
+    await _bot(
+      '${s.whatToChangeInItem}: ${item.name} ${fmtAmount(item.price, _curr)}',
+      chips: [
+        QuickChip(label: s.editName, onTap: () async {
+          _editSubStep = 'name';
+          _setStep(FlowStep.itemEdit);
+          await _bot(s.enterNewName, ms: 200);
+        }),
+        QuickChip(label: s.editPrice, onTap: () async {
+          _editSubStep = 'price';
+          _setStep(FlowStep.itemEdit);
+          await _bot(s.enterNewPrice, ms: 200);
+        }),
+        QuickChip(label: s.editWhoOrdered, onTap: () async {
+          _editSubStep = 'who';
+          _setStep(FlowStep.itemWho);
+          await _bot(
+            _s.itemWhoPrompt(item.name, fmtAmount(item.price, _curr)),
+            chips: [
+              ..._draftState.people.map((p) => QuickChip(
+                label: p.name,
+                onTap: () => _selectPersonForItem(p.id),
+              )),
+              QuickChip(label: s.everyone, onTap: () => _updateItemWho(
+                _draftState.people.map((p) => p.id).toList()
+              )),
+            ],
+            ms: 200,
+          );
+        }),
+        QuickChip(label: s.deleteItem, onTap: () async {
+          final items = List<BillItem>.from(_draftState.items);
+          final name = items[_editingItemIndex].name;
+          items.removeAt(_editingItemIndex);
+          ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
+          await _bot(_s.itemRemoved(name), ms: 200);
+          _showItemSummary();
+        }),
+      ],
+      ms: 200,
+    );
+  }
+
+  Future<void> _handleItemEditStep(String text) async {
+    final items = List<BillItem>.from(_draftState.items);
+    final item = items[_editingItemIndex];
+
+    if (_editSubStep == 'name') {
+      items[_editingItemIndex] = BillItem(
+        id: item.id, name: text.trim(),
+        price: item.price, personIds: item.personIds,
+      );
+      ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
+      await _bot(_s.itemUpdated(text.trim()), ms: 200);
+      _showItemSummary();
+    } else if (_editSubStep == 'price') {
+      final price = double.tryParse(text.trim().replaceAll(',', '.'));
+      if (price == null || price <= 0) {
+        await _bot(_s.pleaseEnterValidNumber, ms: 200);
+        return;
+      }
+      items[_editingItemIndex] = BillItem(
+        id: item.id, name: item.name,
+        price: price, personIds: item.personIds,
+      );
+      ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
+      await _bot(_s.itemUpdated(item.name), ms: 200);
+      _showItemSummary();
+    }
+  }
+
+  Future<void> _updateItemWho(List<String> personIds) async {
+    final items = List<BillItem>.from(_draftState.items);
+    final item = items[_editingItemIndex];
+    items[_editingItemIndex] = BillItem(
+      id: item.id, name: item.name,
+      price: item.price, personIds: personIds,
+    );
+    ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
+    await _bot(_s.itemUpdated(item.name), ms: 200);
+    _showItemSummary();
+  }
+
+  // ═══════════════════ EDIT MENU (from final confirm) ═══════════════════════
+
+  Future<void> _showEditMenu() async {
+    _setStep(FlowStep.editMenu);
+    final s = _s;
+    await _bot(
+      s.whatToEdit,
+      chips: [
+        QuickChip(label: s.editPeople, onTap: () async {
+          _draft.setPeople([]);
+          await _start();
+        }),
+        QuickChip(label: s.editNumberOfItems, onTap: () {
+          _draft.clearItems();
+          _askItemCount();
+        }),
+        QuickChip(label: s.editItems, onTap: () => _showItemEditList()),
+        QuickChip(label: s.editVat, onTap: () {
+          _draft.setExtras(_draftState.extras.copyWith(vatPct: 0));
+          _askVat();
+        }),
+        QuickChip(label: s.editService, onTap: () {
+          _draft.setExtras(_draftState.extras.copyWith(servicePct: 0));
+          _askService();
+        }),
+        QuickChip(label: s.editTip, onTap: () {
+          _draft.setExtras(_draftState.extras.copyWith(tipPct: 0));
+          _askTip();
+        }),
+      ],
+      ms: 200,
     );
   }
 
@@ -369,11 +441,8 @@ class FlowController extends Notifier<List<ChatMessage>> {
       final result = await ocr.scanReceipt(file, knownPeople: _draftState.people);
       ref.read(isTypingProvider.notifier).value = false;
       if (result.isArabic && result.items.isEmpty) {
-        await _bot(
-          s.arabicReceiptDetected,
-          ms: 300,
-          chips: [QuickChip(label: s.addItemsManually, onTap: () async => _bot(s.whatElse, ms: 200))],
-        );
+        await _bot(s.arabicReceiptDetected, ms: 300,
+          chips: [QuickChip(label: s.addItemsManually, onTap: () async => _bot(s.whatElse, ms: 200))]);
         return;
       }
       if (result.items.isEmpty) {
@@ -390,16 +459,16 @@ class FlowController extends Notifier<List<ChatMessage>> {
         '${s.scannedItems(result.items.length)}\n$preview$more\n\nTotal: ${fmtAmount(total, _curr)}\n\n${s.whoOrderedWhat}',
         chips: [
           QuickChip(label: s.addMoreItems, onTap: () async => _bot(s.whatElse, ms: 200)),
-          QuickChip(label: s.splitEqually, onTap: () { _addUser(s.splitEqually); _showEditScreen(); }),
+          QuickChip(label: s.splitEqually, onTap: () { _addUser(s.splitEqually); _showItemSummary(); }),
         ],
       );
     } catch (e) {
       ref.read(isTypingProvider.notifier).value = false;
-      await _bot(s.cantScanReceipt, ms: 300);
+      await _bot(_s.cantScanReceipt, ms: 300);
     }
   }
 
-  // ═══════════════════ STEP 3 — VAT ════════════════════════════════════════
+  // ═══════════════════ STEP VAT ════════════════════════════════════════════
 
   Future<void> _askVat() async {
     _setStep(FlowStep.vat);
@@ -407,7 +476,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     await _bot(
       '${s.step3Title}\n\n${s.quickOptionOrCustom}',
       chips: [
-        QuickChip(label: '0%',  onTap: () { _addUser('0%');  _applyVat(0);  }),
+        QuickChip(label: s.noVatChip, onTap: () { _addUser(s.noVatChip); _applyVat(0); }),
         QuickChip(label: '5%',  onTap: () { _addUser('5%');  _applyVat(5);  }),
         QuickChip(label: '10%', onTap: () { _addUser('10%'); _applyVat(10); }),
         QuickChip(label: '14%', onTap: () { _addUser('14%'); _applyVat(14); }),
@@ -430,10 +499,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _handleVat(String text, {bool requireConfirm = true}) async {
     final s = _s;
     final n = parseNumber(text);
-    if (n == null || n < 0) {
-      await _bot(s.typeValidNumber, ms: 200);
-      return;
-    }
+    if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
     _draft.setExtras(_draftState.extras.copyWith(vatPct: n));
     if (!requireConfirm) { _askService(); return; }
     await _bot(s.vatConfirm(n), chips: [
@@ -445,7 +511,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     ]);
   }
 
-  // ═══════════════════ STEP 4 — SERVICE ════════════════════════════════════
+  // ═══════════════════ STEP SERVICE ════════════════════════════════════════
 
   Future<void> _askService() async {
     _setStep(FlowStep.service);
@@ -453,7 +519,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     await _bot(
       '${s.step4Title}\n\n${s.quickOptionOrCustom}',
       chips: [
-        QuickChip(label: '0%',  onTap: () { _addUser('0%');  _applyService(0);  }),
+        QuickChip(label: s.noServiceChip, onTap: () { _addUser(s.noServiceChip); _applyService(0); }),
         QuickChip(label: '5%',  onTap: () { _addUser('5%');  _applyService(5);  }),
         QuickChip(label: '10%', onTap: () { _addUser('10%'); _applyService(10); }),
         QuickChip(label: '12%', onTap: () { _addUser('12%'); _applyService(12); }),
@@ -476,10 +542,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _handleService(String text, {bool requireConfirm = true}) async {
     final s = _s;
     final n = parseNumber(text);
-    if (n == null || n < 0) {
-      await _bot(s.typeValidNumber, ms: 200);
-      return;
-    }
+    if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
     _draft.setExtras(_draftState.extras.copyWith(servicePct: n));
     if (!requireConfirm) { _askTip(); return; }
     await _bot(s.serviceConfirm(n), chips: [
@@ -491,7 +554,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     ]);
   }
 
-  // ═══════════════════ STEP 5 — TIP ════════════════════════════════════════
+  // ═══════════════════ STEP TIP ════════════════════════════════════════════
 
   Future<void> _askTip() async {
     _setStep(FlowStep.tip);
@@ -499,7 +562,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     await _bot(
       '${s.step5Title}\n\n${s.quickOptionOrCustom}',
       chips: [
-        QuickChip(label: '0%',  onTap: () { _addUser('0%');  _applyTip(0);  }),
+        QuickChip(label: s.noTipChip, onTap: () { _addUser(s.noTipChip); _applyTip(0); }),
         QuickChip(label: '5%',  onTap: () { _addUser('5%');  _applyTip(5);  }),
         QuickChip(label: '10%', onTap: () { _addUser('10%'); _applyTip(10); }),
         QuickChip(label: '15%', onTap: () { _addUser('15%'); _applyTip(15); }),
@@ -521,10 +584,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _handleTip(String text, {bool requireConfirm = true}) async {
     final s = _s;
     final n = parseNumber(text);
-    if (n == null || n < 0) {
-      await _bot(s.typeValidNumber, ms: 200);
-      return;
-    }
+    if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
     _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
     if (!requireConfirm) { _showFinalConfirm(); return; }
     await _bot(s.tipConfirm(n), chips: [
@@ -536,7 +596,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     ]);
   }
 
-  // ═══════════════════ STEP 6 — FINAL CONFIRM ══════════════════════════════
+  // ═══════════════════ FINAL CONFIRM ═══════════════════════════════════════
 
   Future<void> _showFinalConfirm() async {
     _setStep(FlowStep.confirm);
@@ -552,19 +612,17 @@ class FlowController extends Notifier<List<ChatMessage>> {
       '${s.itemsCount(_draftState.items.length)}',
       '${s.subtotal(fmtAmount(sub, _curr))}',
       '',
-      ext.vatPct > 0     ? s.vatLine(ext.vatPct, fmtAmount(vatAmt, _curr))     : s.vatNone,
+      ext.vatPct > 0     ? s.vatLine(ext.vatPct, fmtAmount(vatAmt, _curr))         : s.vatNone,
       ext.servicePct > 0 ? s.serviceLine(ext.servicePct, fmtAmount(svcAmt, _curr)) : s.serviceNone,
-      ext.tipPct > 0     ? s.tipLine(ext.tipPct, fmtAmount(tipAmt, _curr))     : s.tipNone,
+      ext.tipPct > 0     ? s.tipLine(ext.tipPct, fmtAmount(tipAmt, _curr))         : s.tipNone,
       '',
       s.grandTotalLine(fmtAmount(total, _curr)),
     ].join('\n');
     await _bot(
       '${s.finalConfirmTitle}\n\n$lines\n\n${s.allGoodQuestion}',
       chips: [
-        QuickChip(label: s.calculate, onTap: () { _addUser(s.calculate); _calcAndShow(); }),
-        QuickChip(label: s.changeVat,     onTap: () { _addUser(s.changeVat);     _draft.setExtras(_draftState.extras.copyWith(vatPct: 0));     _askVat();     }),
-        QuickChip(label: s.changeService, onTap: () { _addUser(s.changeService); _draft.setExtras(_draftState.extras.copyWith(servicePct: 0)); _askService(); }),
-        QuickChip(label: s.changeTip,     onTap: () { _addUser(s.changeTip);     _draft.setExtras(_draftState.extras.copyWith(tipPct: 0));     _askTip();     }),
+        QuickChip(label: s.everythingLooksGood, onTap: () { _addUser(s.everythingLooksGood); _calcAndShow(); }),
+        QuickChip(label: s.editBtn, onTap: () => _showEditMenu()),
       ],
     );
   }
@@ -572,14 +630,15 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _handleConfirm(String text) async {
     final low = text.toLowerCase();
     if (low.contains('yes') || low.contains('ok') || low.contains('calculate') ||
-        low.contains('go') || low.contains('نعم') || low.contains('احسب')) {
+        low.contains('go') || low.contains('نعم') || low.contains('احسب') ||
+        low.contains('looks good') || low.contains('everything')) {
       _calcAndShow();
     } else {
       await _bot(_s.tapCalculate, ms: 200);
     }
   }
 
-  // ═══════════════════ STEP 7 — RESULT ═════════════════════════════════════
+  // ═══════════════════ RESULT ═══════════════════════════════════════════════
 
   void _calcAndShow() {
     _setStep(FlowStep.result);
@@ -591,7 +650,13 @@ class FlowController extends Notifier<List<ChatMessage>> {
   }
 
   Future<void> reset() async {
-    _editMode = false;
+    _pendingItemName  = '';
+    _pendingItemPrice = '';
+    _totalItems       = 0;
+    _currentItemIndex = 0;
+    _editingItemIndex = -1;
+    _editSubStep      = '';
+    _selectedPersonIds.clear();
     _draft.reset();
     _setStep(FlowStep.people);
     ref.read(splitResultProvider.notifier).value = null;

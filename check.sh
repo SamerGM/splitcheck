@@ -1,0 +1,143 @@
+#!/bin/bash
+echo "================================================"
+echo "       SPLITCHECK PRE-PUSH CHECKLIST"
+echo "================================================"
+ERRORS=()
+
+# 1. Dart errors
+{ flutter analyze lib/ 2>&1 | grep -E "^  error" > /dev/null && ERRORS+=("1. Dart errors found"); } || true
+
+# 2. Key Android files exist
+{ ls android/app/build.gradle.kts android/settings.gradle.kts android/app/src/main/kotlin/com/samer/splitcheck/MainActivity.kt > /dev/null 2>&1 || ERRORS+=("2. Missing key Android files"); }
+
+# 3. speech_to_text disabled
+{ grep -q "# speech_to_text" pubspec.yaml || ERRORS+=("3. speech_to_text not disabled"); }
+
+# 4. Gradle newDsl=false
+{ grep -q "android.newDsl=false" android/gradle.properties || ERRORS+=("4. newDsl should be false"); }
+
+# 5. AndroidX enabled
+{ grep -q "android.useAndroidX=true" android/gradle.properties || ERRORS+=("5. AndroidX not enabled"); }
+
+# 6. builtInKotlin=false
+{ grep -q "android.builtInKotlin=false" android/gradle.properties || ERRORS+=("6. builtInKotlin should be false"); }
+
+# 7. Gradle wrapper version
+{ grep -q "gradle-9" android/gradle/wrapper/gradle-wrapper.properties || ERRORS+=("7. Gradle wrapper version unexpected"); }
+
+# 8. Package name consistent
+{ grep -q "com.samer.splitcheck" android/app/build.gradle.kts || ERRORS+=("8. Package name wrong in build.gradle.kts"); }
+{ grep -q "com.samer.splitcheck" android/app/src/main/kotlin/com/samer/splitcheck/MainActivity.kt || ERRORS+=("8. Package name wrong in MainActivity"); }
+
+# 9. compileSdk = 36
+{ grep -q "compileSdk = 36" android/app/build.gradle.kts || ERRORS+=("9. compileSdk not 36"); }
+
+# 10. NDK version
+{ grep -q "ndkVersion = \"28.2.13676358\"" android/app/build.gradle.kts || ERRORS+=("10. NDK version wrong"); }
+
+# 11. minSdk and targetSdk
+{ grep -q "minSdk = 21" android/app/build.gradle.kts || ERRORS+=("11. minSdk not 21"); }
+{ grep -q "targetSdk = 35" android/app/build.gradle.kts || ERRORS+=("11. targetSdk not 35"); }
+
+# 12. Signing config
+{ grep -q "signingConfigs" android/app/build.gradle.kts || ERRORS+=("12. Signing config missing"); }
+{ grep -q "signingConfig = signingConfigs.getByName" android/app/build.gradle.kts || ERRORS+=("12. Release not signed"); }
+
+# 13. key.properties exists
+{ ls android/key.properties > /dev/null 2>&1 || ERRORS+=("13. key.properties missing"); }
+
+# 14. Workflow secrets
+{ grep -q "KEYSTORE_BASE64" .github/workflows/build.yml || ERRORS+=("14. KEYSTORE_BASE64 missing"); }
+{ grep -q "STORE_PASSWORD" .github/workflows/build.yml || ERRORS+=("14. STORE_PASSWORD missing"); }
+{ grep -q "KEY_PASSWORD" .github/workflows/build.yml || ERRORS+=("14. KEY_PASSWORD missing"); }
+{ grep -q "KEY_ALIAS" .github/workflows/build.yml || ERRORS+=("14. KEY_ALIAS missing"); }
+
+# 15. CRITICAL: github.run_number for unique version code
+{ grep -q "github.run_number" .github/workflows/build.yml || ERRORS+=("15. ⚠️ CRITICAL: github.run_number missing - PLAY STORE WILL REJECT AAB"); }
+
+# 16. Workflow steps
+{ grep -q "Bump version code" .github/workflows/build.yml || ERRORS+=("16. Version bump step missing"); }
+{ grep -q "Build AAB" .github/workflows/build.yml || ERRORS+=("16. Build AAB step missing"); }
+{ grep -q "Upload AAB" .github/workflows/build.yml || ERRORS+=("16. Upload AAB step missing"); }
+{ grep -q "branches: \[ main \]" .github/workflows/build.yml || ERRORS+=("16. Workflow trigger wrong"); }
+
+# 17. Proguard rules
+{ grep -q "com.google.android.play.core" android/app/proguard-rules.pro || ERRORS+=("17. Proguard Play Core rules missing"); }
+{ grep -q "com.google.mlkit" android/app/proguard-rules.pro || ERRORS+=("17. Proguard ML Kit rules missing"); }
+{ grep -q "io.flutter" android/app/proguard-rules.pro || ERRORS+=("17. Proguard Flutter rules missing"); }
+
+# 18. Launcher icons all 5 sizes
+{ ls android/app/src/main/res/mipmap-hdpi/ic_launcher.png > /dev/null 2>&1 || ERRORS+=("18. Launcher icon hdpi missing"); }
+{ ls android/app/src/main/res/mipmap-mdpi/ic_launcher.png > /dev/null 2>&1 || ERRORS+=("18. Launcher icon mdpi missing"); }
+{ ls android/app/src/main/res/mipmap-xhdpi/ic_launcher.png > /dev/null 2>&1 || ERRORS+=("18. Launcher icon xhdpi missing"); }
+{ ls android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png > /dev/null 2>&1 || ERRORS+=("18. Launcher icon xxhdpi missing"); }
+{ ls android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png > /dev/null 2>&1 || ERRORS+=("18. Launcher icon xxxhdpi missing"); }
+
+# 19. App icon asset
+{ ls assets/icon/icon.png > /dev/null 2>&1 || ERRORS+=("19. App icon asset missing"); }
+
+# 20. pubspec dependencies
+{ grep -q "flutter_riverpod" pubspec.yaml || ERRORS+=("20. flutter_riverpod missing"); }
+{ grep -q "hive_flutter" pubspec.yaml || ERRORS+=("20. hive_flutter missing"); }
+{ grep -q "google_mlkit_text_recognition" pubspec.yaml || ERRORS+=("20. google_mlkit missing"); }
+{ grep -q "image_picker" pubspec.yaml || ERRORS+=("20. image_picker missing"); }
+{ grep -q "share_plus: \^13" pubspec.yaml || ERRORS+=("20. share_plus wrong version"); }
+{ grep -q "path_provider" pubspec.yaml || ERRORS+=("20. path_provider missing"); }
+{ grep -q "flutter_launcher_icons" pubspec.yaml || ERRORS+=("20. flutter_launcher_icons missing"); }
+
+# 21. Currency format
+{ grep -q "toStringAsFixed(2)" lib/core/utils/currency.dart || ERRORS+=("21. Currency format broken"); }
+
+# 22. Result card
+{ grep -q "FittedBox" lib/features/result/result_card.dart || ERRORS+=("22. FittedBox missing in result card"); }
+{ grep -q "RepaintBoundary" lib/features/result/result_card.dart || ERRORS+=("22. RepaintBoundary missing for image share"); }
+{ grep -q "share_plus" lib/features/result/result_card.dart || ERRORS+=("22. share_plus not imported in result_card"); }
+
+# 23. Chat screen
+{ grep -q "onRestart" lib/features/flow/chat_screen.dart || ERRORS+=("23. onRestart missing"); }
+{ grep -q "ImageSource.camera" lib/features/flow/chat_screen.dart || ERRORS+=("23. Camera option missing"); }
+{ grep -q "ImageSource.gallery" lib/features/flow/chat_screen.dart || ERRORS+=("23. Gallery option missing"); }
+{ grep -q "_NameSelector" lib/features/flow/chat_screen.dart || ERRORS+=("23. NameSelector widget missing"); }
+{ grep -q "_NameSelectorState" lib/features/flow/chat_screen.dart || ERRORS+=("23. NameSelectorState missing"); }
+
+# 24. Flow controller
+{ grep -q "confirmSelectedPeople" lib/features/flow/flow_controller.dart || ERRORS+=("24. confirmSelectedPeople missing"); }
+{ grep -q "Future<void> reset()" lib/features/flow/flow_controller.dart || ERRORS+=("24. reset() missing"); }
+{ grep -q "howManyItems\|itemCount" lib/features/flow/flow_controller.dart || ERRORS+=("24. New item flow missing"); }
+{ grep -q "low == 'yes'" lib/features/flow/flow_controller.dart || ERRORS+=("24. Typed yes/no for people missing"); }
+
+# 25. Providers
+{ grep -q "itemCount" lib/core/services/providers.dart || ERRORS+=("25. itemCount FlowStep missing"); }
+{ grep -q "itemName" lib/core/services/providers.dart || ERRORS+=("25. itemName FlowStep missing"); }
+{ grep -q "itemWho" lib/core/services/providers.dart || ERRORS+=("25. itemWho FlowStep missing"); }
+
+# 26. Strings bilingual
+{ grep -q "isAr" lib/core/utils/strings.dart || ERRORS+=("26. Arabic strings missing"); }
+{ grep -q "howManyItems" lib/core/utils/strings.dart || ERRORS+=("26. New flow strings missing"); }
+{ grep -q "confirmSelectedPeople\|looksGood" lib/core/utils/strings.dart || ERRORS+=("26. looksGood string missing"); }
+
+# 27. Settings provider
+{ grep -q "stringsProvider" lib/core/services/settings_provider.dart || ERRORS+=("27. stringsProvider missing"); }
+{ grep -q "languageProvider" lib/core/services/settings_provider.dart || ERRORS+=("27. languageProvider missing"); }
+
+# 28. MainActivity correct
+{ grep -q "FlutterActivity" android/app/src/main/kotlin/com/samer/splitcheck/MainActivity.kt || ERRORS+=("28. MainActivity wrong"); }
+
+# 29. Version format
+{ grep -q "^version: .*+[0-9]" pubspec.yaml || ERRORS+=("29. Version format wrong"); }
+
+# 30. settings.gradle.kts has correct plugins
+{ grep -q "dev.flutter.flutter-plugin-loader" android/settings.gradle.kts || ERRORS+=("30. Flutter plugin loader missing"); }
+{ grep -q "com.android.application" android/settings.gradle.kts || ERRORS+=("30. Android application plugin missing"); }
+
+# Summary
+echo ""
+echo "================================================"
+if [ ${#ERRORS[@]} -eq 0 ]; then
+  echo "✅ ALL CHECKS PASSED! Safe to push."
+else
+  echo "❌ ${#ERRORS[@]} ISSUE(S) FOUND - DO NOT PUSH:"
+  echo ""
+  for e in "${ERRORS[@]}"; do echo "  ⚠️  $e"; done
+fi
+echo "================================================"

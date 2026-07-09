@@ -120,4 +120,40 @@ class S {
   // Share
   String shareHeader(String merchant) => '🧾 $merchant';
   String get shareFooter => isAr ? 'تم التقسيم عبر Split Check' : 'Split via Split Check';
+
+  // New flow strings
+  String get howManyItems => isAr ? 'كم عدد العناصر في الفاتورة؟' : 'How many items are on the bill?';
+  String get howManyMoreItems => isAr ? 'كم عدد العناصر الإضافية؟' : 'How many more items?';
+  String itemNamePrompt(int current, int total) => isAr ? 'العنصر $current من $total — ما اسمه؟' : 'Item $current of $total — What\'s the name?';
+  String itemPricePrompt(String name) => isAr ? '$name — ما هو السعر؟' : '$name — What\'s the price?';
+  String itemWhoPrompt(String name, String price) => isAr ? '$name $price — من طلبه؟' : '$name $price — Who ordered it?';
+  String get confirm => isAr ? 'تأكيد ✓' : 'Confirm ✓';
+  String get everyone => isAr ? 'الجميع' : 'Everyone';
+  String get looksGood => isAr ? 'يبدو جيداً ✓' : 'Looks good ✓';
+  String get addMoreItemsBtn => isAr ? 'أضف المزيد من العناصر' : 'Add more items';
+  String get editExistingItem => isAr ? 'تعديل عنصر موجود' : 'Edit an existing item';
+  String get everythingLooksGood => isAr ? 'كل شيء يبدو جيداً ✓' : 'Everything looks good ✓';
+  String get editBtn => isAr ? 'تعديل ✏️' : 'Edit ✏️';
+  String get whatToEdit => isAr ? 'ماذا تريد تعديل؟' : 'What would you like to edit?';
+  String get editPeople => isAr ? '👥 الأشخاص' : '👥 People';
+  String get editNumberOfItems => isAr ? '🔢 عدد العناصر' : '🔢 Number of items';
+  String get editItems => isAr ? '🍔 العناصر' : '🍔 Items';
+  String get editVat => isAr ? '💰 الضريبة' : '💰 VAT';
+  String get editService => isAr ? '🛎 الخدمة' : '🛎 Service';
+  String get editTip => isAr ? '💵 الإكرامية' : '💵 Tip';
+  String get whichItemToEdit => isAr ? 'أي عنصر تريد تعديله؟' : 'Which item do you want to edit?';
+  String get whatToChangeInItem => isAr ? 'ماذا تريد تغيير؟' : 'What do you want to change?';
+  String get editName => isAr ? 'الاسم' : 'Name';
+  String get editPrice => isAr ? 'السعر' : 'Price';
+  String get editWhoOrdered => isAr ? 'من طلبه' : 'Who ordered it';
+  String get deleteItem => isAr ? 'حذف العنصر' : 'Delete item';
+  String get enterNewName => isAr ? 'أدخل الاسم الجديد:' : 'Enter new name:';
+  String get enterNewPrice => isAr ? 'أدخل السعر الجديد:' : 'Enter new price:';
+  String get noVatChip => isAr ? 'بدون ضريبة' : 'No VAT';
+  String get noServiceChip => isAr ? 'بدون خدمة' : 'No Service';
+  String get noTipChip => isAr ? 'بدون إكرامية' : 'No Tip';
+  String itemConfirmed(String name, String price, String who) => isAr ? '✓ $name $price → $who' : '✓ $name $price → $who';
+  String allItemsAdded(String subtotal) => isAr ? 'تمت إضافة جميع العناصر:\n\nالمجموع الفرعي: $subtotal' : 'All items added:\n\nSubtotal: $subtotal';
+  String get pleaseEnterValidNumber => isAr ? 'يرجى إدخال رقم صحيح' : 'Please enter a valid number';
+  String get selectAtLeastOne => isAr ? 'يرجى اختيار شخص واحد على الأقل' : 'Please select at least one person';
 }
