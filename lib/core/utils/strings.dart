@@ -124,9 +124,9 @@ class S {
   // New flow strings
   String get howManyItems => isAr ? 'كم عدد العناصر في الفاتورة؟' : 'How many items are on the bill?';
   String get howManyMoreItems => isAr ? 'كم عدد العناصر الإضافية؟' : 'How many more items?';
-  String itemNamePrompt(int current, int total) => isAr ? 'العنصر $current من $total — ما اسمه؟' : 'Item $current of $total — What\'s the name?';
-  String itemPricePrompt(String name) => isAr ? '$name — ما هو السعر؟' : '$name — What\'s the price?';
-  String itemWhoPrompt(String name, String price) => isAr ? '$name $price — من طلبه؟' : '$name $price — Who ordered it?';
+  String itemNamePrompt(int current, int total) => isAr ? 'العنصر $current من $total — ما اسم الطبق؟' : 'Item $current of $total — What\'s the item name?';
+  String itemPricePrompt(String name) => isAr ? 'ما هو سعر $name؟' : 'What\'s the price of $name?';
+  String itemWhoPrompt(String name, String price) => isAr ? 'من طلب $name ($price)؟' : 'Who ordered $name ($price)?';
   String get confirm => isAr ? 'تأكيد ✓' : 'Confirm ✓';
   String get everyone => isAr ? 'الجميع' : 'Everyone';
   String get looksGood => isAr ? 'يبدو جيداً ✓' : 'Looks good ✓';

@@ -186,41 +186,7 @@ class _TopBar extends ConsumerWidget {
       color: surfaceColor,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(children: [
-        // Logo
-        Container(
-          width: 32, height: 32,
-          decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Icon(Icons.receipt_long, color: accentColor, size: 17),
-        ),
-        const Gap(8),
-        Text('SplitCheck', style: TextStyle(
-          fontSize: 16, fontWeight: FontWeight.w800, color: accentColor)),
-        const Spacer(),
-
-        // Progress dots
-        Row(children: FlowStep.values.map((s) {
-          final si = FlowStep.values.indexOf(s);
-          final ci = FlowStep.values.indexOf(step);
-          return AnimatedContainer(
-            duration: 350.ms,
-            width: si == ci ? 22 : (si < ci ? 14 : 6),
-            height: 6, margin: const EdgeInsets.only(left: 3),
-            decoration: BoxDecoration(
-              color: si < ci
-                  ? (isDark ? AppTheme.darkSuccess : AppTheme.lightSuccess)
-                  : si == ci
-                      ? accentColor
-                      : (isDark ? Colors.white : Colors.black).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(3),
-            ),
-          );
-        }).toList()),
-        const Gap(8),
-
-        // Language toggle EN / AR
+        // Language toggle - LEFT side
         GestureDetector(
           onTap: () {
             ref.read(languageProvider.notifier).toggle();
@@ -263,9 +229,21 @@ class _TopBar extends ConsumerWidget {
             ]),
           ),
         ),
+        // Logo + SplitCheck - CENTER
+        const Spacer(),
+        Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(
+            color: accentColor.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(Icons.receipt_long, color: accentColor, size: 15),
+        ),
         const Gap(6),
-
-        // Theme toggle ☀️ / 🌙
+        Text('SplitCheck', style: TextStyle(
+          fontSize: 15, fontWeight: FontWeight.w800, color: accentColor)),
+        const Spacer(),
+        // Theme toggle - RIGHT side
         GestureDetector(
           onTap: () => ref.read(themeProvider.notifier).toggle(context),
           child: Container(

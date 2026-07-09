@@ -141,3 +141,34 @@ else
   for e in "${ERRORS[@]}"; do echo "  ⚠️  $e"; done
 fi
 echo "================================================"
+
+# 71. Progress dots removed from header
+{ ! grep -q "FlowStep.values.map" lib/features/flow/chat_screen.dart || ERRORS+=("71. Progress dots still in header"); }
+
+# 72. Header has language on left, SplitCheck center, theme on right
+{ grep -q "Language toggle - LEFT" lib/features/flow/chat_screen.dart || ERRORS+=("72. Header layout not updated"); }
+
+# 73. Name selector uses GridView
+{ grep -q "GridView.count" lib/features/flow/chat_screen.dart || ERRORS+=("73. Name selector not using grid layout"); }
+
+# 74. Item name prompt updated
+{ grep -q "item name" lib/core/utils/strings.dart || ERRORS+=("74. Item name prompt not updated"); }
+
+# 75. Price prompt updated
+{ grep -q "price of" lib/core/utils/strings.dart || ERRORS+=("75. Price prompt not updated"); }
+
+# 76. Who ordered prompt updated
+{ grep -q "Who ordered" lib/core/utils/strings.dart || ERRORS+=("76. Who ordered prompt not updated"); }
+
+# 77. Floating restart button exists
+{ grep -q "FloatingActionButton" lib/features/flow/chat_screen.dart || ERRORS+=("77. Floating restart button missing"); }
+
+# 78. Compact share card in result_card
+{ grep -q "Compact share card\|COMPACT SHARE" lib/features/result/result_card.dart || ERRORS+=("78. Compact share card missing"); }
+
+# 79. Full breakdown section in result_card
+{ grep -q "Full breakdown\|FULL BREAKDOWN" lib/features/result/result_card.dart || ERRORS+=("79. Full breakdown section missing"); }
+
+# 80. Add more items doesn't clear existing
+{ ! grep -q "_draft.clearItems" lib/features/flow/flow_controller.dart || ERRORS+=("80. clearItems still called - will clear items on add more"); }
+
