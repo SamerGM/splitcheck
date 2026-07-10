@@ -7,11 +7,23 @@ import '../models/person.dart';
 /// Supported separators between names:
 /// , ، and و & + - / \ space newline
 List<String> parsePeopleNames(String input) {
-  return input
+  // First try splitting by explicit separators
+  final bySeparator = input
       .split(RegExp(r',|،|\band\b|\bو\b|\n|&|\+|-|/|\\', caseSensitive: false))
       .map((n) => n.trim())
       .where((n) => n.isNotEmpty && n.length < 40)
       .toList();
+  
+  // If only one token found and it contains spaces, split by space
+  if (bySeparator.length == 1 && bySeparator[0].contains(' ')) {
+    return bySeparator[0]
+        .split(RegExp(r'\s+'))
+        .map((n) => n.trim())
+        .where((n) => n.isNotEmpty && n.length < 40)
+        .toList();
+  }
+  
+  return bySeparator;
 }
 
 // ── Item parser ───────────────────────────────────────────────────────────────

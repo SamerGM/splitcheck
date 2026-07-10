@@ -256,11 +256,13 @@ class ResultCard extends ConsumerWidget {
           _Btn(
             label: s.copy, icon: Icons.copy_rounded,
             primary: true, accentDark: accentDark, textMuted: textMuted,
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: _buildShareText(s)));
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(s.copied),
-                  duration: const Duration(seconds: 2)));
+            onTap: () async {
+              await Clipboard.setData(ClipboardData(text: _buildShareText(s)));
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(s.copied),
+                    duration: const Duration(seconds: 2)));
+              }
             },
           ),
           const SizedBox(width: 7),

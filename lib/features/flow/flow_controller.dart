@@ -29,6 +29,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
   // Edit state
   int    _editingItemIndex = -1;
   String _editSubStep      = ''; // 'name', 'price', 'who'
+  bool   _editingFromMenu  = false; // when true, go back to confirm after edit
 
   @override
   List<ChatMessage> build() {
@@ -166,7 +167,14 @@ class FlowController extends Notifier<List<ChatMessage>> {
   }
 
   Future<void> _handleItemName(String text) async {
-    _pendingItemName = text.trim();
+    final name = text.trim();
+    // Check for duplicate item name
+    final existing = _draftState.items.map((i) => i.name.toLowerCase()).toList();
+    if (existing.contains(name.toLowerCase())) {
+      await _bot('"$name" already exists. Please enter a different item name.', ms: 300);
+      return;
+    }
+    _pendingItemName = name;
     _setStep(FlowStep.itemPrice);
     await _bot(_s.itemPricePrompt(_pendingItemName), ms: 300);
   }
@@ -321,15 +329,6 @@ class FlowController extends Notifier<List<ChatMessage>> {
           _setStep(FlowStep.itemWho);
           await _bot(
             _s.itemWhoPrompt(item.name, fmtAmount(item.price, _curr)),
-            chips: [
-              ..._draftState.people.map((p) => QuickChip(
-                label: p.name,
-                onTap: () => _selectPersonForItem(p.id),
-              )),
-              QuickChip(label: s.everyone, onTap: () => _updateItemWho(
-                _draftState.people.map((p) => p.id).toList()
-              )),
-            ],
             ms: 200,
           );
         }),
@@ -404,14 +403,17 @@ class FlowController extends Notifier<List<ChatMessage>> {
         }),
         QuickChip(label: s.editItems, onTap: () => _showItemEditList()),
         QuickChip(label: s.editVat, onTap: () {
+          _editingFromMenu = true;
           _draft.setExtras(_draftState.extras.copyWith(vatPct: 0));
           _askVat();
         }),
         QuickChip(label: s.editService, onTap: () {
+          _editingFromMenu = true;
           _draft.setExtras(_draftState.extras.copyWith(servicePct: 0));
           _askService();
         }),
         QuickChip(label: s.editTip, onTap: () {
+          _editingFromMenu = true;
           _draft.setExtras(_draftState.extras.copyWith(tipPct: 0));
           _askTip();
         }),
@@ -483,6 +485,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final s = _s;
     _draft.setExtras(_draftState.extras.copyWith(vatPct: n));
     await _bot(n == 0 ? s.noVat : s.vatApplied(n), ms: 250);
+    if (_editingFromMenu) { _editingFromMenu = false; _showFinalConfirm(); return; }
     _askService();
   }
 
@@ -526,6 +529,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final s = _s;
     _draft.setExtras(_draftState.extras.copyWith(servicePct: n));
     await _bot(n == 0 ? s.noService : s.serviceApplied(n), ms: 250);
+    if (_editingFromMenu) { _editingFromMenu = false; _showFinalConfirm(); return; }
     _askTip();
   }
 
@@ -568,6 +572,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final s = _s;
     _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
     await _bot(n == 0 ? s.noTip : s.tipApplied(n), ms: 250);
+    _editingFromMenu = false;
     _showFinalConfirm();
   }
 

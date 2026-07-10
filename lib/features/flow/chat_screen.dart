@@ -114,6 +114,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     ref.listen(chatProvider,    (_, __) => _scrollToBottom());
     ref.listen(isTypingProvider,(_, __) => _scrollToBottom());
+    ref.listen(flowStepProvider, (prev, next) {
+      if (next == FlowStep.itemWho) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final people = ref.read(billDraftProvider).people;
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => _NameSelectorModal(
+              people: people,
+              isDark: isDark,
+              onConfirm: (ids) {
+                Navigator.pop(context);
+                ref.read(chatProvider.notifier).confirmSelectedPeople(ids);
+              },
+            ),
+          );
+        });
+      }
+    });
 
     final showScan = step == FlowStep.itemName || step == FlowStep.itemPrice || step == FlowStep.itemWho || step == FlowStep.itemCount;
 
@@ -145,12 +165,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             },
           ),
         ),
-        if (step == FlowStep.itemWho)
-          _NameSelector(
-            people: ref.watch(billDraftProvider).people,
-            isDark: isDark,
-            onConfirm: (ids) => ref.read(chatProvider.notifier).confirmSelectedPeople(ids),
-          ),
+
         _InputBar(
           ctrl: _ctrl, isRec: _isRec, liveText: _live,
           showScan: showScan,
@@ -678,6 +693,174 @@ class _NameSelectorState extends State<_NameSelector> {
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
                 ),
+              ),
+            ),
+          ),
+      ]),
+    );
+  }
+}
+
+// ── DRAGGABLE RESTART BUTTON ──────────────────────────────────────────────────
+class _DraggableRestartButton extends StatefulWidget {
+  final bool isDark;
+  final VoidCallback onRestart;
+  final Color accent;
+  const _DraggableRestartButton({required this.isDark, required this.onRestart, required this.accent});
+  @override State<_DraggableRestartButton> createState() => _DraggableRestartButtonState();
+}
+
+class _DraggableRestartButtonState extends State<_DraggableRestartButton> {
+  double _x = -1;
+  double _y = -1;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    if (_x < 0) _x = size.width - 60;
+    if (_y < 0) _y = size.height * 0.5;
+
+    return Positioned(
+      left: _x,
+      top: _y,
+      child: Draggable(
+        feedback: _buildButton(),
+        childWhenDragging: const SizedBox.shrink(),
+        onDragEnd: (details) {
+          setState(() {
+            _x = details.offset.dx.clamp(0, size.width - 50);
+            _y = details.offset.dy.clamp(0, size.height - 50);
+          });
+        },
+        child: _buildButton(),
+      ),
+    );
+  }
+
+  Widget _buildButton() {
+    return GestureDetector(
+      onTap: widget.onRestart,
+      child: Container(
+        width: 44, height: 44,
+        decoration: BoxDecoration(
+          color: widget.accent,
+          shape: BoxShape.circle,
+          boxShadow: [BoxShadow(
+            color: widget.accent.withValues(alpha: 0.4),
+            blurRadius: 8, spreadRadius: 1,
+          )],
+        ),
+        child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+// ── NAME SELECTOR MODAL ───────────────────────────────────────────────────────
+class _NameSelectorModal extends StatefulWidget {
+  final List<Person> people;
+  final bool isDark;
+  final void Function(List<String> ids) onConfirm;
+  const _NameSelectorModal({required this.people, required this.isDark, required this.onConfirm});
+  @override State<_NameSelectorModal> createState() => _NameSelectorModalState();
+}
+
+class _NameSelectorModalState extends State<_NameSelectorModal> {
+  final Set<String> _selected = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
+    final bg = widget.isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
+    final border = widget.isDark ? Colors.white12 : Colors.black12;
+    final allSelected = _selected.length == widget.people.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Handle bar
+        Container(
+          width: 40, height: 4,
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: widget.isDark ? Colors.white24 : Colors.black12,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        Text('Select people', style: TextStyle(
+          fontSize: 16, fontWeight: FontWeight.w700,
+          color: widget.isDark ? Colors.white : Colors.black87)),
+        const SizedBox(height: 16),
+        // Grid
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 3.2,
+          children: [
+            ...widget.people.map((p) {
+              final selected = _selected.contains(p.id);
+              return GestureDetector(
+                onTap: () => setState(() {
+                  if (selected) _selected.remove(p.id);
+                  else _selected.add(p.id);
+                }),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  decoration: BoxDecoration(
+                    color: selected ? accent : Colors.transparent,
+                    border: Border.all(color: selected ? accent : border),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(child: Text(p.name, style: TextStyle(
+                    fontSize: 13, fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : (widget.isDark ? Colors.white70 : Colors.black54),
+                  ))),
+                ),
+              );
+            }),
+            // Everyone
+            GestureDetector(
+              onTap: () => setState(() {
+                if (allSelected) _selected.clear();
+                else _selected.addAll(widget.people.map((p) => p.id));
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                decoration: BoxDecoration(
+                  color: allSelected ? Colors.green : Colors.transparent,
+                  border: Border.all(color: Colors.green.withValues(alpha: allSelected ? 1 : 0.4)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(child: Text('🌐 Everyone', style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600,
+                  color: allSelected ? Colors.white : Colors.green,
+                ))),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (_selected.isNotEmpty)
+          SizedBox(
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: () => widget.onConfirm(_selected.toList()),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text('Confirm ✓',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
               ),
             ),
           ),
