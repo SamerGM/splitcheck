@@ -543,8 +543,20 @@ class _InputBar extends StatelessWidget {
             ),
           ),
           const Gap(7),
-          // Mic button hidden until speech_to_text v2 embedding fix
-          // const Gap(7),
+          _IBtn(
+            onTap: onVoice,
+            icon: isRec ? Icons.stop : Icons.mic,
+            color: isRec ? Colors.white : mutedColor,
+            bg: isRec
+                ? const Color(0xFFB91C1C)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : Colors.black.withValues(alpha: 0.06)),
+            border: isRec
+                ? const Color(0xFFB91C1C)
+                : borderColor,
+          ),
+          const Gap(7),
           Column(
             mainAxisSize: MainAxisSize.min,
             children: [
