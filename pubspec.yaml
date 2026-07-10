@@ -23,7 +23,7 @@ dependencies:
   image_picker: ^1.1.0
 
   # Voice input — 6.6.2 (free, on-device, EN + AR)
-  speech_to_text: ^7.4.0
+  # speech_to_text: ^7.4.0  # Temporarily disabled
 
   # Share results via WhatsApp / clipboard / SMS
   share_plus: ^13.0.0
