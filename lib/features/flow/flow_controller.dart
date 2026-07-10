@@ -67,7 +67,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       case FlowStep.itemCount:  _handleItemCount(text); break;
       case FlowStep.itemName:   _handleItemName(text);  break;
       case FlowStep.itemPrice:  _handleItemPrice(text); break;
-      case FlowStep.itemWho:    break; // handled by chips
+      case FlowStep.itemWho:    _handleItemWhoText(text); break;
       case FlowStep.itemSummary: break; // handled by chips
       case FlowStep.itemEdit:   _handleItemEditStep(text); break;
       case FlowStep.editMenu:   break; // handled by chips
@@ -193,6 +193,56 @@ class FlowController extends Notifier<List<ChatMessage>> {
       _s.itemWhoPrompt(_pendingItemName, _pendingItemPrice),
       ms: 300,
     );
+  }
+
+  Future<void> _handleItemWhoText(String text) async {
+    final s = _s;
+    final low = text.toLowerCase().trim();
+
+    // Check for "everyone" keywords
+    final sharedKeywords = ['everyone', 'all', 'shared', 'الكل', 'الجميع', 'كل', 'مشترك'];
+    if (sharedKeywords.contains(low)) {
+      await confirmSelectedPeople(_draftState.people.map((p) => p.id).toList());
+      return;
+    }
+
+    // Try to match names
+    final names = text.split(RegExp(r',|،|\band\b|\bو\b|&|\+|\s+', caseSensitive: false))
+        .map((n) => n.trim())
+        .where((n) => n.isNotEmpty)
+        .toList();
+
+    final matchedIds = <String>[];
+    final unmatched = <String>[];
+
+    for (final name in names) {
+      final match = _draftState.people.firstWhere(
+        (p) => p.name.toLowerCase() == name.toLowerCase() ||
+               p.name.toLowerCase().contains(name.toLowerCase()),
+        orElse: () => const Person(id: '', name: '', color: Color(0xFF000000)),
+      );
+      if (match.id.isNotEmpty) {
+        if (!matchedIds.contains(match.id)) matchedIds.add(match.id);
+      } else {
+        unmatched.add(name);
+      }
+    }
+
+    if (unmatched.isNotEmpty) {
+      final validNames = _draftState.people.map((p) => p.name).join(', ');
+      await _bot(
+        '❌ "${unmatched.join(', ')}" not found in the list.\n\nValid names: $validNames\n\nPlease try again or select from the popup.',
+        ms: 300,
+      );
+      return;
+    }
+
+    if (matchedIds.isEmpty) {
+      await _bot('Please select at least one person or type a valid name.', ms: 300);
+      return;
+    }
+
+    await confirmSelectedPeople(matchedIds);
   }
 
   // Name selection is handled via widget in chat_screen

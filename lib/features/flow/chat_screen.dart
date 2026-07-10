@@ -121,6 +121,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           showModalBottomSheet(
             context: context,
             isScrollControlled: true,
+            isDismissible: false,
+            enableDrag: false,
             backgroundColor: Colors.transparent,
             builder: (_) => _NameSelectorModal(
               people: people,
