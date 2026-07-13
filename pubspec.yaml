@@ -17,7 +17,7 @@ dependencies:
   hive_flutter: ^1.1.0
 
   # OCR — Google ML Kit 0.15.0 (free, on-device, English receipts)
-  google_mlkit_text_recognition: ^0.15.0
+  google_mlkit_text_recognition: ^0.16.0
 
   # Image picker — 1.1.x (security fix for ContentProvider filenames included)
   image_picker: ^1.1.0
@@ -28,6 +28,7 @@ dependencies:
   # Share results via WhatsApp / clipboard / SMS
   share_plus: ^13.0.0
   path_provider: ^2.1.0
+  image: ^4.1.0
 
   # Localization — English + Arabic RTL support
   flutter_localizations:
@@ -41,7 +42,7 @@ dependencies:
   gap: ^3.0.1
 
   # Fonts
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
 
   # Unique IDs for bills and people
   uuid: ^4.3.3
@@ -51,7 +52,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.0
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
 
 flutter:
   uses-material-design: true

@@ -81,22 +81,140 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_isRec) {
       await voice.stop();
       setState(() => _isRec = false);
-      if (_ctrl.text.trim().isNotEmpty) await _send();
     } else {
-      setState(() { _isRec = true; _live = ''; });
+      setState(() { _isRec = true; _live = ''; _ctrl.text = ''; });
       await voice.listen(
         locale: locale,
         onResult: (text, isFinal) {
           setState(() => _live = text);
-          if (isFinal) _ctrl.text = text;
         },
-        onDone: () {
+        onDone: () async {
           if (!mounted) return;
           setState(() => _isRec = false);
-          if (_ctrl.text.trim().isNotEmpty) _send();
+          final heard = _live.trim();
+          if (heard.isEmpty) return;
+          // Show confirmation dialog
+          await _showVoiceConfirmation(heard);
         },
       );
     }
+  }
+
+  Future<void> _showVoiceConfirmation(String heard) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
+    final editController = TextEditingController(text: heard);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              // Handle bar
+              Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text('I heard:', style: TextStyle(
+                fontSize: 13, color: isDark ? Colors.white54 : Colors.black45)),
+              const SizedBox(height: 8),
+              // Editable text field
+              TextField(
+                controller: editController,
+                style: TextStyle(
+                  fontSize: 18, fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black87),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: accent.withValues(alpha: 0.3)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: accent.withValues(alpha: 0.3)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: accent, width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+                maxLines: 3,
+                minLines: 1,
+              ),
+              const SizedBox(height: 12),
+              // Buttons
+              Row(children: [
+                // Try again
+                Expanded(child: GestureDetector(
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleVoice();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
+                    ),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.refresh, size: 16, color: isDark ? Colors.white54 : Colors.black45),
+                      const SizedBox(width: 6),
+                      Text('Try again', style: TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white54 : Colors.black45)),
+                    ]),
+                  ),
+                )),
+                const SizedBox(width: 10),
+                // Confirm
+                Expanded(child: GestureDetector(
+                  onTap: () {
+                    final text = editController.text.trim();
+                    Navigator.pop(ctx);
+                    if (text.isNotEmpty) {
+                      setState(() => _ctrl.text = text);
+                      _send();
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      const Icon(Icons.check, size: 16, color: Colors.white),
+                      const SizedBox(width: 6),
+                      const Text('Confirm ✓', style: TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                    ]),
+                  ),
+                )),
+              ]),
+            ]),
+          ),
+        ),
+      ),
+    );
+    editController.dispose();
   }
 
   @override
@@ -141,7 +259,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Scaffold(
 
-      body: SafeArea(child: Column(children: [
+      body: Stack(children: [
+        SafeArea(child: Column(children: [
         _TopBar(
           step: step,
           currency: currency,
@@ -172,9 +291,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ctrl: _ctrl, isRec: _isRec, liveText: _live,
           showScan: showScan,
           onSend: _send, onVoice: _toggleVoice, onScan: _pickImage,
-          onRestart: () => ref.read(chatProvider.notifier).reset(),
+          onRestart: () {},
         ),
       ])),
+        _DraggableRestartButton(
+          isDark: isDark,
+          onRestart: () => ref.read(chatProvider.notifier).reset(),
+          accent: isDark ? AppTheme.darkAccent : AppTheme.lightAccent,
+        ),
+      ]),
     );
   }
 }

@@ -1,6 +1,7 @@
 // lib/core/services/parser_service.dart
 
 import '../models/person.dart';
+import '../utils/number_parser.dart';
 
 // ── People parser ─────────────────────────────────────────────────────────────
 
