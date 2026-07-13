@@ -172,3 +172,34 @@ echo "================================================"
 # 80. Add more items doesn't clear existing
 { ! grep -q "_draft.clearItems" lib/features/flow/flow_controller.dart || ERRORS+=("80. clearItems still called - will clear items on add more"); }
 
+
+# 81. No toggles in share image (result_card)
+{ ! grep -q "Language toggle\|Theme toggle" lib/features/result/result_card.dart || ERRORS+=("81. Toggles still in share image"); }
+
+# 82. VAT/Service/Tip use Arabic strings
+{ grep -q "vatLabel\|serviceLabel\|tipLabel" lib/features/result/result_card.dart || ERRORS+=("82. VAT/Service/Tip not using bilingual labels"); }
+
+# 83. Copy text has separators
+{ grep -q '"\*\*\*' lib/features/result/result_card.dart || ERRORS+=("83. Copy text missing separators"); }
+
+# 84. Arabic number normalization exists
+{ grep -q "arabicDigits\|normalizeDigits" lib/core/utils/number_parser.dart || ERRORS+=("84. Arabic number normalization missing"); }
+
+# 85. number_parser.dart exists
+{ ls lib/core/utils/number_parser.dart > /dev/null 2>&1 || ERRORS+=("85. number_parser.dart missing"); }
+
+# 86. Voice confirmation dialog exists
+{ grep -q "_showVoiceConfirmation\|showVoiceConfirmation" lib/features/flow/chat_screen.dart || ERRORS+=("86. Voice confirmation dialog missing"); }
+
+# 87. Draggable restart button exists
+{ grep -q "_DraggableRestartButton" lib/features/flow/chat_screen.dart || ERRORS+=("87. Draggable restart button missing"); }
+
+# 88. Restart button removed from input bar column
+{ ! grep -q "onRestart.*icon.*refresh" lib/features/flow/chat_screen.dart || ERRORS+=("88. Restart button still in input bar"); }
+
+# 89. image package for OCR preprocessing
+{ grep -q "image: " pubspec.yaml || ERRORS+=("89. image package missing for OCR"); }
+
+# 90. OCR preprocessing exists
+{ grep -q "_preprocessImage" lib/core/services/ocr_service.dart || ERRORS+=("90. OCR preprocessing missing"); }
+

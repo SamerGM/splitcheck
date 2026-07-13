@@ -120,6 +120,9 @@ class S {
   // Share
   String shareHeader(String merchant) => '🧾 $merchant';
   String get shareFooter => isAr ? 'تم التقسيم عبر Split Check' : 'Split via Split Check';
+  String get vatLabel => isAr ? 'ضريبة' : 'VAT';
+  String get serviceLabel => isAr ? 'خدمة' : 'Service';
+  String get tipLabel => isAr ? 'إكرامية' : 'Tip';
 
   // New flow strings
   String get howManyItems => isAr ? 'كم عدد العناصر في الفاتورة؟' : 'How many items are on the bill?';

@@ -24,29 +24,31 @@ class ResultCard extends ConsumerWidget {
   String _buildShareText(S s) {
     final buf = StringBuffer();
     buf.writeln(s.shareHeader(bill.merchant));
-    buf.writeln('─' * 24);
+    buf.writeln('*' * 24);
     for (final pr in result.personResults) {
-      buf.writeln('${pr.person.name}: ${fmtAmount(pr.total, bill.currency)}');
+      buf.writeln('');
+      buf.writeln('*** ${pr.person.name} ***');
+      buf.writeln('${s.grandTotal}: ${fmtAmount(pr.total, bill.currency)}');
       final myItems = bill.items.where((it) =>
         it.personIds.isEmpty
             ? bill.people.map((p) => p.id).contains(pr.person.id)
             : it.personIds.contains(pr.person.id)).toList();
       for (final it in myItems) {
         final assigned = it.personIds.isEmpty ? bill.people.length : it.personIds.length;
-        buf.writeln('  ${it.name}: ${fmtAmount(it.price / assigned, bill.currency)}');
+        buf.writeln('  • ${it.name}: ${fmtAmount(it.price / assigned, bill.currency)}');
       }
-      if (pr.vatShare > 0) buf.writeln('  VAT: ${fmtAmount(pr.vatShare, bill.currency)}');
-      if (pr.serviceShare > 0) buf.writeln('  Service: ${fmtAmount(pr.serviceShare, bill.currency)}');
-      if (pr.tipShare > 0) buf.writeln('  Tip: ${fmtAmount(pr.tipShare, bill.currency)}');
+      if (pr.vatShare > 0) buf.writeln('  • ${s.vatLabel}: ${fmtAmount(pr.vatShare, bill.currency)}');
+      if (pr.serviceShare > 0) buf.writeln('  • ${s.serviceLabel}: ${fmtAmount(pr.serviceShare, bill.currency)}');
+      if (pr.tipShare > 0) buf.writeln('  • ${s.tipLabel}: ${fmtAmount(pr.tipShare, bill.currency)}');
+      buf.writeln('*' * 24);
     }
-    buf.writeln('─' * 24);
     buf.writeln('${s.grandTotal}: ${fmtAmount(result.grandTotal, bill.currency)}');
     buf.writeln();
     buf.writeln(s.shareFooter);
     return buf.toString();
   }
 
-  Future<void> _shareAsImage(BuildContext context, S s, bool isDark, String language) async {
+  Future<void> _shareAsImage(BuildContext context, S s) async {
     try {
       final boundary = _shareKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
@@ -69,15 +71,14 @@ class ResultCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark      = Theme.of(context).brightness == Brightness.dark;
-    final s           = ref.watch(stringsProvider);
-    final language    = ref.watch(languageProvider);
-    final accent      = isDark ? AppTheme.darkAccent     : AppTheme.lightAccent;
-    final accentDark  = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
-    final textHint    = isDark ? AppTheme.darkTextHint   : AppTheme.lightTextHint;
-    final textMuted   = isDark ? AppTheme.darkTextMuted  : AppTheme.lightTextMuted;
-    final bgColor     = isDark ? const Color(0xFF0A1628) : Colors.white;
-    final cardColor   = isDark ? const Color(0xFF0F1D30) : const Color(0xFFEEF4FB);
+    final isDark     = Theme.of(context).brightness == Brightness.dark;
+    final s          = ref.watch(stringsProvider);
+    final accent     = isDark ? AppTheme.darkAccent     : AppTheme.lightAccent;
+    final accentDark = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
+    final textHint   = isDark ? AppTheme.darkTextHint   : AppTheme.lightTextHint;
+    final textMuted  = isDark ? AppTheme.darkTextMuted  : AppTheme.lightTextMuted;
+    final bgColor    = isDark ? const Color(0xFF0A1628) : Colors.white;
+    final cardColor  = isDark ? const Color(0xFF0F1D30) : const Color(0xFFEEF4FB);
 
     return Column(
       children: [
@@ -90,78 +91,7 @@ class ResultCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header with logo + toggles
-                Row(children: [
-                  Container(
-                    width: 28, height: 28,
-                    decoration: BoxDecoration(
-                      color: accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(Icons.receipt_long, color: accent, size: 15),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('SplitCheck', style: TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w800, color: accent)),
-                  const Spacer(),
-                  // Language toggle
-                  Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white12 : Colors.black12,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: language == 'en' ? accent : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Text('EN', style: TextStyle(
-                          fontSize: 10, fontWeight: FontWeight.w700,
-                          color: language == 'en' ? Colors.white : (isDark ? Colors.white54 : Colors.black45))),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: language == 'ar' ? accent : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Text('AR', style: TextStyle(
-                          fontSize: 10, fontWeight: FontWeight.w700,
-                          color: language == 'ar' ? Colors.white : (isDark ? Colors.white54 : Colors.black45))),
-                      ),
-                    ]),
-                  ),
-                  const SizedBox(width: 6),
-                  // Theme toggle
-                  Container(
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white12 : Colors.black12,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: !isDark ? accent : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(Icons.wb_sunny, size: 12, color: !isDark ? Colors.white : (isDark ? Colors.white54 : Colors.black45)),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: isDark ? accent : Colors.transparent,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(Icons.nightlight_round, size: 12, color: isDark ? Colors.white : Colors.black45),
-                      ),
-                    ]),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                // Compact card
+                // Header - logo only, no toggles
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -172,6 +102,16 @@ class ResultCard extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(children: [
+                        Icon(Icons.receipt_long, color: accent, size: 16),
+                        const SizedBox(width: 6),
+                        Text('SplitCheck', style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w800, color: accent)),
+                        const Spacer(),
+                        if (bill.merchant.isNotEmpty)
+                          Text(bill.merchant, style: TextStyle(fontSize: 11, color: textMuted)),
+                      ]),
+                      const SizedBox(height: 10),
                       // Grand total
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -269,7 +209,7 @@ class ResultCard extends ConsumerWidget {
           _Btn(
             label: s.share, icon: Icons.share_rounded,
             accentDark: accentDark, textMuted: textMuted,
-            onTap: () => _shareAsImage(context, s, isDark, language),
+            onTap: () => _shareAsImage(context, s),
           ),
           const SizedBox(width: 7),
           _Btn(
@@ -350,17 +290,17 @@ class _PersonBlock extends StatelessWidget {
         }),
         if (pr.vatShare > 0)
           _Line(
-            label: 'VAT ${bill.extras.vatPct.toStringAsFixed(0)}% × $pct%',
+            label: '${s.vatLabel} ${bill.extras.vatPct.toStringAsFixed(0)}% × $pct%',
             value: fmtAmount(pr.vatShare, bill.currency),
             color: textHint),
         if (pr.serviceShare > 0)
           _Line(
-            label: 'Service ${bill.extras.servicePct.toStringAsFixed(0)}% × $pct%',
+            label: '${s.serviceLabel} ${bill.extras.servicePct.toStringAsFixed(0)}% × $pct%',
             value: fmtAmount(pr.serviceShare, bill.currency),
             color: textHint),
         if (pr.tipShare > 0)
           _Line(
-            label: 'Tip ${bill.extras.tipPct.toStringAsFixed(0)}% × $pct%',
+            label: '${s.tipLabel} ${bill.extras.tipPct.toStringAsFixed(0)}% × $pct%',
             value: fmtAmount(pr.tipShare, bill.currency),
             color: textHint),
       ]),

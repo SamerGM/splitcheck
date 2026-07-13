@@ -682,19 +682,9 @@ class _InputBar extends StatelessWidget {
                 : borderColor,
           ),
           const Gap(7),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _IBtn(
-                onTap: onRestart, icon: Icons.refresh_rounded,
-                color: Colors.white, bg: accentColor, border: accentColor,
-              ),
-              const Gap(6),
-              _IBtn(
-                onTap: onSend, icon: Icons.send_rounded,
-                color: Colors.white, bg: accentDark, border: accentDark,
-              ),
-            ],
+          _IBtn(
+            onTap: onSend, icon: Icons.send_rounded,
+            color: Colors.white, bg: accentDark, border: accentDark,
           ),
         ]),
       ]),
