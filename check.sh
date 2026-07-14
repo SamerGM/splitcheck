@@ -203,3 +203,34 @@ echo "================================================"
 # 90. OCR preprocessing exists
 { grep -q "_preprocessImage" lib/core/services/ocr_service.dart || ERRORS+=("90. OCR preprocessing missing"); }
 
+
+# 91. Voice retry logic exists
+{ grep -q "_voiceRetried" lib/features/flow/chat_screen.dart || ERRORS+=("91. Voice retry logic missing"); }
+
+# 92. Voice confirmation dialog exists
+{ grep -q "_showVoiceConfirmation" lib/features/flow/chat_screen.dart || ERRORS+=("92. Voice confirmation dialog missing"); }
+
+# 93. Arabic digits normalization in number_parser
+{ grep -q "arabicDigits\|٠١٢٣" lib/core/utils/number_parser.dart || ERRORS+=("93. Arabic digit normalization missing"); }
+
+# 94. toArabicDigits helper in strings.dart
+{ grep -q "toArabicDigits" lib/core/utils/strings.dart || ERRORS+=("94. toArabicDigits helper missing"); }
+
+# 95. مُقسمة replaces مشترك in Arabic
+{ grep -q "مُقسمة" lib/core/utils/strings.dart || ERRORS+=("95. Arabic shared word not updated to مُقسمة"); }
+
+# 96. vatLabel serviceLabel tipLabel in strings
+{ grep -q "vatLabel\|serviceLabel\|tipLabel" lib/core/utils/strings.dart || ERRORS+=("96. Bilingual VAT/Service/Tip labels missing"); }
+
+# 97. number_parser imported in parser_service
+{ grep -q "number_parser" lib/core/services/parser_service.dart || ERRORS+=("97. number_parser not imported in parser_service"); }
+
+# 98. SystemSound import in chat_screen
+{ grep -q "flutter/services.dart" lib/features/flow/chat_screen.dart || ERRORS+=("98. Services import missing in chat_screen"); }
+
+# 99. OCR image package exists
+{ grep -q "^  image:" pubspec.yaml || ERRORS+=("99. image package missing in pubspec"); }
+
+# 100. Draggable button added to Stack in build
+{ grep -q "_DraggableRestartButton" lib/features/flow/chat_screen.dart || ERRORS+=("100. DraggableRestartButton not in build"); }
+

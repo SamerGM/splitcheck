@@ -1,4 +1,15 @@
 // lib/core/utils/strings.dart
+// Convert Western digits to Arabic-Indic digits for display
+String toArabicDigits(String input) {
+  const western = '0123456789';
+  const arabic  = '٠١٢٣٤٥٦٧٨٩';
+  var result = input;
+  for (int i = 0; i < 10; i++) {
+    result = result.replaceAll(western[i], arabic[i]);
+  }
+  return result;
+}
+
 class S {
   final bool isAr;
   const S(this.isAr);
@@ -25,7 +36,7 @@ class S {
   String get itemFormat => isAr ? 'الصيغة: اسم العنصر · السعر · من' : 'Format: item name · price · who';
   String get itemExample1 => isAr ? 'برجر 35 أحمد ← لأحمد وحده' : 'Burger 35 Ahmed → Ahmed alone';
   String get itemExample2 => isAr ? 'بيتزا 90 أحمد, سارة ← تقسيم بينهما' : 'Pizza 90 Ahmed, Sara → split between them';
-  String get itemExample3 => isAr ? 'قهوة 18 مُشترك ← للجميع' : 'Coffee 18 shared → all';
+  String get itemExample3 => isAr ? 'قهوة 18 مُقسمة ← للجميع' : 'Coffee 18 shared → all';
   String get scanTip => isAr ? 'اضغط 📷 لمسح الفاتورة.' : 'Tap 📷 to scan receipt.';
   String get sayDoneWhenFinished => isAr ? 'قل "تم" عند الانتهاء.' : 'Say "done" when finished.';
   String get done => isAr ? 'تم ✓' : 'Done ✓';
@@ -33,7 +44,7 @@ class S {
   String get addItemFirst => isAr ? 'أضف عنصراً واحداً على الأقل أولاً.' : 'Add at least one item first.';
   String get cantParseItem => isAr ? 'لم أفهم ذلك. حاول: برجر 35 أحمد' : 'Couldn\'t parse that. Try: Burger 35 Ahmed';
   String runningTotal(String amount) => isAr ? 'اجمالي الفاتورة: $amount' : 'Running total: $amount';
-  String get shared => isAr ? 'مُشترك' : 'shared';
+  String get shared => isAr ? 'مُقسمة' : 'shared';
   String get added => isAr ? 'تمت الإضافة:' : 'Added:';
 
   // Edit
@@ -120,6 +131,12 @@ class S {
   // Share
   String shareHeader(String merchant) => '🧾 $merchant';
   String get shareFooter => isAr ? 'تم التقسيم عبر Split Check' : 'Split via Split Check';
+  
+  // Format number in current language
+  String fmtNum(double n, {int decimals = 2}) {
+    final str = n.toStringAsFixed(decimals);
+    return isAr ? toArabicDigits(str) : str;
+  }
   String get vatLabel => isAr ? 'ضريبة' : 'VAT';
   String get serviceLabel => isAr ? 'خدمة' : 'Service';
   String get tipLabel => isAr ? 'إكرامية' : 'Tip';

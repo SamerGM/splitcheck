@@ -200,7 +200,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final low = text.toLowerCase().trim();
 
     // Check for "everyone" keywords
-    final sharedKeywords = ['everyone', 'all', 'shared', 'الكل', 'الجميع', 'كل', 'مشترك'];
+    final sharedKeywords = ['everyone', 'all', 'shared', 'الكل', 'الجميع', 'كل', 'مُقسمة'];
     if (sharedKeywords.contains(low)) {
       await confirmSelectedPeople(_draftState.people.map((p) => p.id).toList());
       return;

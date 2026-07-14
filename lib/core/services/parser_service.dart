@@ -2,6 +2,7 @@
 
 import '../models/person.dart';
 import '../utils/number_parser.dart';
+import '../utils/currency.dart';
 
 // ── People parser ─────────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ class ParsedItem {
 
 const _sharedKeywords = {
   'shared', 'share', 'everyone', 'all', 'everybody',
-  'الكل', 'الجميع', 'كل', 'مشترك', 'مشتركة', 'مُشترك',
+  'الكل', 'الجميع', 'كل', 'مُقسمة',
 };
 
 /// Separators between person names in item assignment:

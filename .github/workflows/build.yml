@@ -53,5 +53,5 @@ jobs:
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
-          name: splitcheck-release
+          name: splitcheck-v1.0-build${{ github.run_number }}
           path: build/app/outputs/bundle/release/*.aab

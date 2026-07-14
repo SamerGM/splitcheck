@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
@@ -24,8 +25,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _ctrl   = TextEditingController();
   final _scroll = ScrollController();
   final _focus  = FocusNode();
-  bool _isRec   = false;
-  String _live  = '';
+  bool _isRec      = false;
+  String _live     = '';
+  bool _voiceRetried = false;
 
   @override
   void dispose() {
@@ -92,7 +94,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (!mounted) return;
           setState(() => _isRec = false);
           final heard = _live.trim();
-          if (heard.isEmpty) return;
+          if (heard.isEmpty) {
+            // First try failed - beep and retry once
+            if (!_voiceRetried) {
+              _voiceRetried = true;
+              // Play system sound as beep feedback
+              await SystemSound.play(SystemSoundType.click);
+              await Future.delayed(const Duration(milliseconds: 500));
+              if (mounted) await _toggleVoice();
+            } else {
+              // Second try also failed - stop and notify
+              _voiceRetried = false;
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Couldn't hear you. Please record again or type your answer."),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
+            }
+            return;
+          }
+          _voiceRetried = false;
           // Show confirmation dialog
           await _showVoiceConfirmation(heard);
         },
