@@ -258,3 +258,13 @@ echo "================================================"
 # 107. flutter-action is v2.19.0 or higher (uses cache@v5)
 { grep -q "flutter-action@v2\.19\|flutter-action@v2\.[2-9][0-9]\|flutter-action@v[3-9]" .github/workflows/build.yml || ERRORS+=("107. flutter-action below v2.19.0 - may use deprecated cache@v2"); }
 
+
+# 108. actions/checkout is v5+ (Node.js 24 native)
+{ grep -q "actions/checkout@v[5-9]\|actions/checkout@v[1-9][0-9]" .github/workflows/build.yml || ERRORS+=("108. actions/checkout below v5 - not Node.js 24 native"); }
+
+# 109. actions/setup-java is v5+ (Node.js 24 native)
+{ grep -q "actions/setup-java@v[5-9]\|actions/setup-java@v[1-9][0-9]" .github/workflows/build.yml || ERRORS+=("109. actions/setup-java below v5 - not Node.js 24 native"); }
+
+# 110. actions/upload-artifact is v6+ (Node.js 24 native)
+{ grep -q "actions/upload-artifact@v[6-9]\|actions/upload-artifact@v[1-9][0-9]" .github/workflows/build.yml || ERRORS+=("110. actions/upload-artifact below v6 - not Node.js 24 native"); }
+
