@@ -234,3 +234,19 @@ echo "================================================"
 # 100. Draggable button added to Stack in build
 { grep -q "_DraggableRestartButton" lib/features/flow/chat_screen.dart || ERRORS+=("100. DraggableRestartButton not in build"); }
 
+
+# 101. flutter-action version is not deprecated
+{ grep -q "flutter-action@v2\.[2-9]\|flutter-action@v[3-9]" .github/workflows/build.yml || ERRORS+=("101. flutter-action version may use deprecated cache - update to v2.4.0+"); }
+
+# 102. No deprecated actions/cache v2 in workflow
+{ ! grep -q "actions/cache@v2\|actions/cache@v1" .github/workflows/build.yml || ERRORS+=("102. Deprecated actions/cache v1/v2 found in workflow"); }
+
+# 103. Voice retry flag exists
+{ grep -q "_voiceRetried" lib/features/flow/chat_screen.dart || ERRORS+=("103. Voice retry flag missing"); }
+
+# 104. مُقسمة used instead of مشترك
+{ ! grep -q "'مشترك'" lib/core/services/parser_service.dart || ERRORS+=("104. Old Arabic shared word still in parser"); }
+
+# 105. number_parser.dart has English word parsing
+{ grep -q "_enOnes\|_enTens" lib/core/utils/number_parser.dart || ERRORS+=("105. English word-to-number parsing missing"); }
+
