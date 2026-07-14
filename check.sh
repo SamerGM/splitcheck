@@ -281,3 +281,38 @@ echo "================================================"
 # 114. Bill default removed from bill_draft
 { ! grep -q "': 'Bill'" lib/core/models/bill_draft.dart || ERRORS+=("114. Hardcoded 'Bill' still in bill_draft.dart"); }
 
+
+# 115. Item count uses parseNumber not int.tryParse
+{ ! grep -q "int.tryParse" lib/features/flow/flow_controller.dart || ERRORS+=("115. Item count still using int.tryParse - text numbers won't work"); }
+
+# 116. Item price uses parseNumber not double.tryParse in handler
+{ grep -q "final price = parseNumber" lib/features/flow/flow_controller.dart || ERRORS+=("116. Item price not using parseNumber - text numbers won't work"); }
+
+# 117. Voice retry cancels mic on second failure
+{ grep -q "voice.cancel" lib/features/flow/chat_screen.dart || ERRORS+=("117. Voice not cancelled on second failure"); }
+
+# 118. Voice error shown in red snackbar
+{ grep -q "backgroundColor: Colors.red" lib/features/flow/chat_screen.dart || ERRORS+=("118. Voice error snackbar not styled red"); }
+
+# 119. _fmt helper exists in flow_controller for Arabic numbers
+{ grep -q "String _fmt" lib/features/flow/flow_controller.dart || ERRORS+=("119. _fmt helper missing in flow_controller"); }
+
+# 120. toArabicDigits used in flow_controller
+{ grep -q "toArabicDigits" lib/features/flow/flow_controller.dart || ERRORS+=("120. toArabicDigits not used in flow_controller"); }
+
+
+# 121. _fmt used instead of fmtAmount in flow_controller (except inside _fmt itself)
+{ grep -q "_fmt(" lib/features/flow/flow_controller.dart || ERRORS+=("121. _fmt not used in flow_controller - Arabic numbers won't display"); }
+
+# 122. normalizeDigits function in number_parser
+{ grep -q "String normalizeDigits" lib/core/utils/number_parser.dart || ERRORS+=("122. normalizeDigits missing - Arabic digit input won't work"); }
+
+# 123. parseNumberFromText handles English words
+{ grep -q "_enOnes\|thirty\|twenty" lib/core/utils/number_parser.dart || ERRORS+=("123. English word-to-number missing"); }
+
+# 124. parseNumberFromText handles Arabic words
+{ grep -q "_arOnes\|ثلاثة\|خمسة" lib/core/utils/number_parser.dart || ERRORS+=("124. Arabic word-to-number missing"); }
+
+# 125. parseNumber calls normalizeDigits
+{ grep -q "normalizeDigits" lib/core/services/parser_service.dart || ERRORS+=("125. parseNumber not normalizing Arabic digits"); }
+

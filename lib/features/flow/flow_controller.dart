@@ -44,6 +44,13 @@ class FlowController extends Notifier<List<ChatMessage>> {
   FlowStep          get _step       => ref.read(flowStepProvider);
   String            get _curr       => ref.read(currencyProvider);
   S                 get _s          => ref.read(stringsProvider);
+  
+  // Format amount respecting current language
+  String _fmt(double amount) {
+    final s = _s;
+    final str = fmtAmount(amount, _curr);
+    return s.isAr ? toArabicDigits(str) : str;
+  }
 
   void _setStep(FlowStep s) => ref.read(flowStepProvider.notifier).value = s;
 
@@ -150,7 +157,8 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> _handleItemCount(String text) async {
     final s = _s;
-    final n = int.tryParse(text.trim());
+    final parsed = parseNumber(text.trim());
+    final n = parsed?.toInt();
     if (n == null || n <= 0) {
       await _bot(s.pleaseEnterValidNumber, ms: 200);
       return;
@@ -181,12 +189,12 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> _handleItemPrice(String text) async {
     final s = _s;
-    final price = double.tryParse(text.trim().replaceAll(',', '.'));
+    final price = parseNumber(text.trim());
     if (price == null || price <= 0) {
       await _bot(s.pleaseEnterValidNumber, ms: 200);
       return;
     }
-    _pendingItemPrice = fmtAmount(price, _curr);
+    _pendingItemPrice = _fmt(price);
     _setStep(FlowStep.itemWho);
 
     await _bot(
@@ -320,11 +328,11 @@ class FlowController extends Notifier<List<ChatMessage>> {
               _draftState.people.firstWhere((p) => p.id == id,
                 orElse: () => const Person(id: '', name: '?', color: Color(0xFF000000))).name
             ).join(', ');
-      return '${e.key + 1}. ${it.name}  ${fmtAmount(it.price, _curr)}  → $who';
+      return '${e.key + 1}. ${it.name}  ${_fmt(it.price)}  → $who';
     }).join('\n');
 
     await _bot(
-      '${s.allItemsAdded(fmtAmount(subtotal, _curr))}\n\n$itemList',
+      '${s.allItemsAdded(_fmt(subtotal))}\n\n$itemList',
       chips: [
         QuickChip(label: s.looksGood, onTap: () {
           _addUser(s.looksGood);
@@ -349,7 +357,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       _s.whichItemToEdit,
       chips: items.asMap().entries.map((e) =>
         QuickChip(
-          label: '${e.key + 1}. ${e.value.name} ${fmtAmount(e.value.price, _curr)}',
+          label: '${e.key + 1}. ${e.value.name} ${_fmt(e.value.price)}',
           onTap: () => _showItemEditOptions(e.key),
         )
       ).toList(),
@@ -362,7 +370,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final item = _draftState.items[index];
     final s = _s;
     await _bot(
-      '${s.whatToChangeInItem}: ${item.name} ${fmtAmount(item.price, _curr)}',
+      '${s.whatToChangeInItem}: ${item.name} ${_fmt(item.price)}',
       chips: [
         QuickChip(label: s.editName, onTap: () async {
           _editSubStep = 'name';
@@ -378,7 +386,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
           _editSubStep = 'who';
           _setStep(FlowStep.itemWho);
           await _bot(
-            _s.itemWhoPrompt(item.name, fmtAmount(item.price, _curr)),
+            _s.itemWhoPrompt(item.name, _fmt(item.price)),
             ms: 200,
           );
         }),
@@ -495,10 +503,10 @@ class FlowController extends Notifier<List<ChatMessage>> {
         _draft.addItem(BillItem(id: _uuid.v4(), name: item.name, price: item.price, personIds: const []));
       }
       final total = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
-      final preview = result.items.take(5).map((i) => '  ${i.name}  ${fmtAmount(i.price, _curr)}').join('\n');
+      final preview = result.items.take(5).map((i) => '  ${i.name}  ${_fmt(i.price)}').join('\n');
       final more = result.items.length > 5 ? '\n  +${result.items.length - 5} more' : '';
       await _bot(
-        '${s.scannedItems(result.items.length)}\n$preview$more\n\nTotal: ${fmtAmount(total, _curr)}\n\n${s.whoOrderedWhat}',
+        '${s.scannedItems(result.items.length)}\n$preview$more\n\nTotal: ${_fmt(total)}\n\n${s.whoOrderedWhat}',
         chips: [
           QuickChip(label: s.addMoreItems, onTap: () async => _bot(s.whatElse, ms: 200)),
           QuickChip(label: s.splitEqually, onTap: () { _addUser(s.splitEqually); _showItemSummary(); }),
@@ -655,13 +663,13 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final lines = [
       '${s.peopleLabel}   ${_draftState.people.map((p) => p.name).join(', ')}',
       '${s.itemsCount(_draftState.items.length)}',
-      '${s.subtotal(fmtAmount(sub, _curr))}',
+      '${s.subtotal(_fmt(sub))}',
       '',
-      ext.vatPct > 0     ? s.vatLine(ext.vatPct, fmtAmount(vatAmt, _curr))         : s.vatNone,
-      ext.servicePct > 0 ? s.serviceLine(ext.servicePct, fmtAmount(svcAmt, _curr)) : s.serviceNone,
-      ext.tipPct > 0     ? s.tipLine(ext.tipPct, fmtAmount(tipAmt, _curr))         : s.tipNone,
+      ext.vatPct > 0     ? s.vatLine(ext.vatPct, _fmt(vatAmt))         : s.vatNone,
+      ext.servicePct > 0 ? s.serviceLine(ext.servicePct, _fmt(svcAmt)) : s.serviceNone,
+      ext.tipPct > 0     ? s.tipLine(ext.tipPct, _fmt(tipAmt))         : s.tipNone,
       '',
-      s.grandTotalLine(fmtAmount(total, _curr)),
+      s.grandTotalLine(_fmt(total)),
     ].join('\n');
     await _bot(
       '${s.finalConfirmTitle}\n\n$lines\n\n${s.allGoodQuestion}',

@@ -100,16 +100,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               _voiceRetried = true;
               // Play system sound as beep feedback
               await SystemSound.play(SystemSoundType.click);
-              await Future.delayed(const Duration(milliseconds: 500));
-              if (mounted) await _toggleVoice();
-            } else {
-              // Second try also failed - stop and notify
-              _voiceRetried = false;
+              await Future.delayed(const Duration(milliseconds: 800));
               if (mounted) {
+                setState(() { _isRec = false; _live = ''; });
+                await _toggleVoice();
+              }
+            } else {
+              // Second try also failed - stop mic and notify
+              _voiceRetried = false;
+              final voice = ref.read(voiceServiceProvider);
+              await voice.cancel();
+              if (mounted) {
+                setState(() { _isRec = false; _live = ''; });
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text("Couldn't hear you. Please record again or type your answer."),
                     duration: Duration(seconds: 3),
+                    backgroundColor: Colors.red,
                   ),
                 );
               }
