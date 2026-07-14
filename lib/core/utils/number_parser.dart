@@ -43,6 +43,16 @@ const _arHundreds = {
 /// Accepts digits ("35"), written English ("thirty five"),
 /// or written Arabic ("خمسة وثلاثون").
 /// Returns null if cannot parse.
+/// Converts Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) to Western digits (0123456789)
+String normalizeDigits(String input) {
+  const arabicDigits = '٠١٢٣٤٥٦٧٨٩';
+  var result = input;
+  for (int i = 0; i < 10; i++) {
+    result = result.replaceAll(arabicDigits[i], i.toString());
+  }
+  return result;
+}
+
 double? parseNumberFromText(String input) {
   final trimmed = input.trim();
   if (trimmed.isEmpty) return null;

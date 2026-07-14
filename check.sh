@@ -268,3 +268,16 @@ echo "================================================"
 # 110. actions/upload-artifact is v6+ (Node.js 24 native)
 { grep -q "actions/upload-artifact@v[6-9]\|actions/upload-artifact@v[1-9][0-9]" .github/workflows/build.yml || ERRORS+=("110. actions/upload-artifact below v6 - not Node.js 24 native"); }
 
+
+# 111. normalizeDigits function exists in number_parser
+{ grep -q "String normalizeDigits" lib/core/utils/number_parser.dart || ERRORS+=("111. normalizeDigits function missing in number_parser.dart"); }
+
+# 112. parseNumber uses parseNumberFromText
+{ grep -q "parseNumberFromText" lib/core/services/parser_service.dart || ERRORS+=("112. parseNumber not using parseNumberFromText - text numbers won't work"); }
+
+# 113. billWord getter exists in strings
+{ grep -q "billWord" lib/core/utils/strings.dart || ERRORS+=("113. billWord getter missing in strings.dart"); }
+
+# 114. Bill default removed from bill_draft
+{ ! grep -q "': 'Bill'" lib/core/models/bill_draft.dart || ERRORS+=("114. Hardcoded 'Bill' still in bill_draft.dart"); }
+

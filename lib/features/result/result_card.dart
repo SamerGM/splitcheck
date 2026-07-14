@@ -62,7 +62,7 @@ class ResultCard extends ConsumerWidget {
       await Share.shareXFiles(
         [XFile(file.path)],
         text: s.shareFooter,
-        subject: 'Bill Split',
+        subject: '\${s.billWord} Split',
       );
     } catch (e) {
       await Share.share(_buildShareText(s), subject: 'Bill Split');

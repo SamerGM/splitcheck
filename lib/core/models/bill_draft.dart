@@ -35,7 +35,7 @@ class BillDraft {
 
   Bill toBill(String currency) => Bill(
     id: const Uuid().v4(),
-    merchant: merchant.isNotEmpty ? merchant : 'Bill',
+    merchant: merchant.isNotEmpty ? merchant : '',
     date: DateTime.now(),
     currency: currency,
     people: people,

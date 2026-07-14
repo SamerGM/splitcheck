@@ -130,6 +130,7 @@ class S {
 
   // Share
   String shareHeader(String merchant) => '🧾 $merchant';
+  String get billWord => isAr ? 'الفاتورة' : 'Bill';
   String get shareFooter => isAr ? 'تم التقسيم عبر Split Check' : 'Split via Split Check';
   
   // Format number in current language

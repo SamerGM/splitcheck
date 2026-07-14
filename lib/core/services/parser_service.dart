@@ -171,11 +171,14 @@ ParsedExtras parseExtras(String input) {
 
 // ── Number parser ─────────────────────────────────────────────────────────────
 
+// ── Number parser ─────────────────────────────────────────────────────────────
 double? parseNumber(String input) {
   final lower = input.toLowerCase().trim();
   if (lower == 'none' || lower == 'no' || lower == 'skip' ||
       lower == 'لا' || lower == 'بدون' || lower == '0') {
     return 0.0;
   }
-  return double.tryParse(lower.replaceAll('%', '').trim());
+  // Normalize Arabic-Indic digits then try word-to-number conversion
+  final normalized = normalizeDigits(lower.replaceAll('%', '').trim());
+  return parseNumberFromText(normalized);
 }
