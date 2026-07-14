@@ -250,3 +250,11 @@ echo "================================================"
 # 105. number_parser.dart has English word parsing
 { grep -q "_enOnes\|_enTens" lib/core/utils/number_parser.dart || ERRORS+=("105. English word-to-number parsing missing"); }
 
+
+# 106. flutter-action uses latest v2 not pinned to old version
+{ grep -q "flutter-action@v2\.1[0-9]\|flutter-action@v[3-9]" .github/workflows/build.yml || ERRORS+=("106. flutter-action pinned to old version - use @v2 for latest"); }
+
+
+# 107. flutter-action is v2.19.0 or higher (uses cache@v5)
+{ grep -q "flutter-action@v2\.19\|flutter-action@v2\.[2-9][0-9]\|flutter-action@v[3-9]" .github/workflows/build.yml || ERRORS+=("107. flutter-action below v2.19.0 - may use deprecated cache@v2"); }
+

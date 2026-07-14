@@ -16,10 +16,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - uses: subosito/flutter-action@v2.4.0
-        with:
-          flutter-version: '3.44.4'
-          channel: 'stable'
+      - name: Setup Flutter
+        run: |
+          git clone https://github.com/flutter/flutter.git --depth 1 --branch 3.44.4 $HOME/flutter
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+
+      - name: Flutter pub get check
+        run: flutter --version
 
       - name: Create local.properties
         run: |
