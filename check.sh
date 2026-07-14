@@ -316,3 +316,16 @@ echo "================================================"
 # 125. parseNumber calls normalizeDigits
 { grep -q "normalizeDigits" lib/core/services/parser_service.dart || ERRORS+=("125. parseNumber not normalizing Arabic digits"); }
 
+
+# 126. OCR shows correction flow (Looks good/Edit/Scan again)
+{ grep -q "Looks good\|Edit items\|Scan again" lib/features/flow/flow_controller.dart || ERRORS+=("126. OCR correction flow missing"); }
+
+# 127. Voice Arabic locale fallback exists
+{ grep -q "ar-EG\|ar-AE\|ar-SA" lib/core/services/voice_service.dart || ERRORS+=("127. Arabic voice locale fallback missing"); }
+
+# 128. Voice listen duration increased
+{ grep -q "seconds: 45\|seconds: 60" lib/core/services/voice_service.dart || ERRORS+=("128. Voice listen duration not increased"); }
+
+# 129. Voice pause detection increased
+{ grep -q "pauseFor.*seconds: [4-9]\|pauseFor.*seconds: [1-9][0-9]" lib/core/services/voice_service.dart || ERRORS+=("129. Voice pause detection not increased"); }
+

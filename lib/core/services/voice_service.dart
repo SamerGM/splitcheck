@@ -28,10 +28,24 @@ class VoiceService {
   }) async {
     final ready = await initialize();
     if (!ready) { onDone(); return; }
+
+    // For Arabic, try multiple locales for better recognition
+    String selectedLocale = localeId(locale);
+    if (locale == VoiceLocale.arabic) {
+      final available = await _speech.locales();
+      final ids = available.map((l) => l.localeId).toList();
+      for (final candidate in ['ar-SA', 'ar-EG', 'ar-AE', 'ar']) {
+        if (ids.any((id) => id.startsWith(candidate.split('-')[0]))) {
+          selectedLocale = candidate;
+          break;
+        }
+      }
+    }
+
     await _speech.listen(
-      localeId: localeId(locale),
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 3),
+      localeId: selectedLocale,
+      listenFor: const Duration(seconds: 45),
+      pauseFor: const Duration(seconds: 5),
       onResult: (SpeechRecognitionResult result) {
         onResult(result.recognizedWords, result.finalResult);
         if (result.finalResult) onDone();
