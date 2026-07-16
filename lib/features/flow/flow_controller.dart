@@ -10,6 +10,7 @@ import '../../core/services/edit_parser.dart';
 import '../../core/services/split_calculator.dart';
 import '../../core/services/settings_provider.dart';
 import '../../core/utils/currency.dart';
+import '../../core/utils/number_parser.dart';
 import '../../core/utils/strings.dart';
 import 'chat_message.dart';
 
@@ -279,9 +280,8 @@ class FlowController extends Notifier<List<ChatMessage>> {
   }
 
   Future<void> _confirmWhoOrdered(List<String> personIds) async {
-    final price = double.tryParse(
-      _pendingItemPrice.replaceAll('\$', '').trim()
-    ) ?? 0.0;
+    final priceStr = normalizeDigits(_pendingItemPrice.replaceAll('\$', '').trim());
+    final price = double.tryParse(priceStr) ?? 0.0;
 
     _draft.addItem(BillItem(
       id: _uuid.v4(),
@@ -552,6 +552,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final n = parseNumber(text);
     if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
     _draft.setExtras(_draftState.extras.copyWith(vatPct: n));
+    if (_editingFromMenu) { _editingFromMenu = false; await _bot(n == 0 ? s.noVat : s.vatApplied(n), ms: 250); _showFinalConfirm(); return; }
     if (!requireConfirm) { _askService(); return; }
     await _bot(s.vatConfirm(n), chips: [
       QuickChip(label: s.yes, onTap: () { _addUser(s.yes); _askService(); }),
@@ -596,6 +597,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final n = parseNumber(text);
     if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
     _draft.setExtras(_draftState.extras.copyWith(servicePct: n));
+    if (_editingFromMenu) { _editingFromMenu = false; await _bot(n == 0 ? s.noService : s.serviceApplied(n), ms: 250); _showFinalConfirm(); return; }
     if (!requireConfirm) { _askTip(); return; }
     await _bot(s.serviceConfirm(n), chips: [
       QuickChip(label: s.yes, onTap: () { _addUser(s.yes); _askTip(); }),
@@ -639,6 +641,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final n = parseNumber(text);
     if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
     _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
+    if (_editingFromMenu) { _editingFromMenu = false; await _bot(n == 0 ? s.noTip : s.tipApplied(n), ms: 250); _showFinalConfirm(); return; }
     if (!requireConfirm) { _showFinalConfirm(); return; }
     await _bot(s.tipConfirm(n), chips: [
       QuickChip(label: s.yes, onTap: () { _addUser(s.yes); _showFinalConfirm(); }),

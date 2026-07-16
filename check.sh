@@ -329,3 +329,19 @@ echo "================================================"
 # 129. Voice pause detection increased
 { grep -q "pauseFor.*seconds: [4-9]\|pauseFor.*seconds: [1-9][0-9]" lib/core/services/voice_service.dart || ERRORS+=("129. Voice pause detection not increased"); }
 
+
+# 130. _handleVat checks _editingFromMenu for typed input
+{ grep -A5 "_handleVat" lib/features/flow/flow_controller.dart | grep -q "_editingFromMenu" || ERRORS+=("130. _handleVat not checking _editingFromMenu - VAT loop bug"); }
+
+# 131. _handleService checks _editingFromMenu for typed input
+{ grep -A5 "_handleService" lib/features/flow/flow_controller.dart | grep -q "_editingFromMenu" || ERRORS+=("131. _handleService not checking _editingFromMenu - Service loop bug"); }
+
+# 132. _handleTip checks _editingFromMenu for typed input
+{ grep -A5 "_handleTip" lib/features/flow/flow_controller.dart | grep -q "_editingFromMenu" || ERRORS+=("132. _handleTip not checking _editingFromMenu - Tip loop bug"); }
+
+# 133. normalizeDigits imported in flow_controller
+{ grep -q "number_parser" lib/features/flow/flow_controller.dart || ERRORS+=("133. number_parser not imported in flow_controller"); }
+
+# 134. Arabic price normalized before parsing
+{ grep -q "normalizeDigits.*pendingItemPrice\|normalizeDigits.*priceStr" lib/features/flow/flow_controller.dart || ERRORS+=("134. Arabic price not normalized before parsing"); }
+
