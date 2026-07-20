@@ -28,6 +28,7 @@ dependencies:
   # Share results via WhatsApp / clipboard / SMS
   share_plus: ^13.0.0
   path_provider: ^2.1.0
+  http: ^1.2.0
   image: ^4.1.0
 
   # Localization — English + Arabic RTL support

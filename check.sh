@@ -345,3 +345,22 @@ echo "================================================"
 # 134. Arabic price normalized before parsing
 { grep -q "normalizeDigits.*pendingItemPrice\|normalizeDigits.*priceStr" lib/features/flow/flow_controller.dart || ERRORS+=("134. Arabic price not normalized before parsing"); }
 
+
+# 135. http package in pubspec
+{ grep -q "http:" pubspec.yaml || ERRORS+=("135. http package missing for Cloud Vision API"); }
+
+# 136. Cloud Vision API implemented in ocr_service
+{ grep -q "vision.googleapis.com" lib/core/services/ocr_service.dart || ERRORS+=("136. Cloud Vision API not implemented in ocr_service"); }
+
+# 137. Cloud Vision API key from environment
+{ grep -q "GOOGLE_VISION_API_KEY" lib/core/services/ocr_service.dart || ERRORS+=("137. GOOGLE_VISION_API_KEY not used in ocr_service"); }
+
+# 138. API key passed in workflow build command
+{ grep -q "GOOGLE_VISION_API_KEY" .github/workflows/build.yml || ERRORS+=("138. GOOGLE_VISION_API_KEY not passed in build workflow"); }
+
+# 139. ML Kit fallback exists in ocr_service
+{ grep -q "_mlKitOcr\|fallback" lib/core/services/ocr_service.dart || ERRORS+=("139. ML Kit fallback missing in ocr_service"); }
+
+# 140. GOOGLE_VISION_API_KEY secret exists check (workflow references it)
+{ grep -q "secrets.GOOGLE_VISION_API_KEY" .github/workflows/build.yml || ERRORS+=("140. GOOGLE_VISION_API_KEY secret not referenced in workflow"); }
+

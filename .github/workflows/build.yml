@@ -51,7 +51,7 @@ jobs:
         run: flutter pub get
 
       - name: Build AAB
-        run: flutter build appbundle --release
+        run: flutter build appbundle --release --dart-define=GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
 
       - name: Rename AAB
         run: |
