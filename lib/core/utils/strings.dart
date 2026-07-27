@@ -173,6 +173,15 @@ class S {
   String get noVatChip => isAr ? 'بدون ضريبة' : 'No VAT';
   String get noServiceChip => isAr ? 'بدون خدمة' : 'No Service';
   String get noTipChip => isAr ? 'بدون إكرامية' : 'No Tip';
+  String get discountQuestion => isAr ? 'هل يوجد خصم أو قسيمة؟' : 'Any discounts or vouchers?';
+  String get noDiscount => isAr ? 'لا يوجد خصم ✓' : 'No discount ✓';
+  String get percentDiscount => isAr ? '% خصم نسبة' : '% Discount';
+  String get fixedDiscount => isAr ? '\$\$ مبلغ ثابت' : '\$\$ Fixed amount';
+  String get enterDiscountPct => isAr ? 'أدخل نسبة الخصم (مثال: 10 لخصم 10%):' : 'Enter discount percentage (e.g. 10 for 10% off):';
+  String get enterDiscountFixed => isAr ? 'أدخل مبلغ الخصم أو القسيمة:' : 'Enter discount or voucher amount:';
+  String discountPctApplied(double n) => isAr ? 'خصم \${n.toStringAsFixed(0)}% ✓' : '\${n.toStringAsFixed(0)}% discount applied ✓';
+  String discountFixedApplied(double n) => isAr ? 'خصم \$n ✓' : '\$n discount applied ✓';
+  String get discountLabel => isAr ? 'الخصم' : 'Discount';
   String itemConfirmed(String name, String price, String who) => isAr ? '✓ $name $price → $who' : '✓ $name $price → $who';
   String allItemsAdded(String subtotal) => isAr ? 'تمت إضافة جميع العناصر:\n\nالمجموع الفرعي: $subtotal' : 'All items added:\n\nSubtotal: $subtotal';
   String get pleaseEnterValidNumber => isAr ? 'يرجى إدخال رقم صحيح' : 'Please enter a valid number';

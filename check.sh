@@ -364,3 +364,34 @@ echo "================================================"
 # 140. GOOGLE_VISION_API_KEY secret exists check (workflow references it)
 { grep -q "secrets.GOOGLE_VISION_API_KEY" .github/workflows/build.yml || ERRORS+=("140. GOOGLE_VISION_API_KEY secret not referenced in workflow"); }
 
+
+# 141. New FlowStep enum has all new steps
+{ grep -q "peopleCount.*itemMethod.*discount" lib/core/services/providers.dart || ERRORS+=("141. New FlowStep enum missing peopleCount, itemMethod or discount"); }
+
+# 142. _handlePeopleCount method exists
+{ grep -q "Future<void> _handlePeopleCount" lib/features/flow/flow_controller.dart || ERRORS+=("142. _handlePeopleCount method missing"); }
+
+# 143. _askItemMethod exists
+{ grep -q "Future<void> _askItemMethod" lib/features/flow/flow_controller.dart || ERRORS+=("143. _askItemMethod method missing"); }
+
+# 144. _askDiscount exists
+{ grep -q "Future<void> _askDiscount" lib/features/flow/flow_controller.dart || ERRORS+=("144. _askDiscount method missing"); }
+
+# 145. _handleDiscount exists
+{ grep -q "Future<void> _handleDiscount" lib/features/flow/flow_controller.dart || ERRORS+=("145. _handleDiscount method missing"); }
+
+# 146. BillExtras has discount fields
+{ grep -q "discountPct\|discountFixed" lib/core/models/bill_extras.dart || ERRORS+=("146. BillExtras missing discount fields"); }
+
+# 147. Discount strings exist
+{ grep -q "discountQuestion\|discountLabel" lib/core/utils/strings.dart || ERRORS+=("147. Discount strings missing"); }
+
+# 148. howManyPeople string exists
+{ grep -q "howManyPeople" lib/core/utils/strings.dart || ERRORS+=("148. howManyPeople string missing"); }
+
+# 149. howToAddItems string exists
+{ grep -q "howToAddItems" lib/core/utils/strings.dart || ERRORS+=("149. howToAddItems string missing"); }
+
+# 150. Restart button hidden when keyboard open
+{ grep -q "viewInsets.bottom == 0" lib/features/flow/chat_screen.dart || ERRORS+=("150. Restart button not hidden when keyboard open"); }
+

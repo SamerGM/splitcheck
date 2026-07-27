@@ -98,4 +98,4 @@ final historyProvider = AsyncNotifierProvider<HistoryNotifier, List<Bill>>(
   HistoryNotifier.new,
 );
 
-enum FlowStep { people, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, confirm, result }
+enum FlowStep { peopleCount, people, itemMethod, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, discount, confirm, result }

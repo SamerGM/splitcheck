@@ -325,11 +325,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           onRestart: () {},
         ),
       ])),
-        _DraggableRestartButton(
-          isDark: isDark,
-          onRestart: () => ref.read(chatProvider.notifier).reset(),
-          accent: isDark ? AppTheme.darkAccent : AppTheme.lightAccent,
-        ),
+        // Hide restart button when keyboard is open
+        if (MediaQuery.of(context).viewInsets.bottom == 0)
+          _DraggableRestartButton(
+            isDark: isDark,
+            onRestart: () => ref.read(chatProvider.notifier).reset(),
+            accent: isDark ? AppTheme.darkAccent : AppTheme.lightAccent,
+          ),
       ]),
     );
   }

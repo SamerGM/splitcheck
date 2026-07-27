@@ -71,7 +71,9 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _addUser(text);
 
     switch (_step) {
+      case FlowStep.peopleCount: _handlePeopleCount(text); break;
       case FlowStep.people:     _handlePeople(text);    break;
+      case FlowStep.itemMethod: break; // handled by chips
       case FlowStep.itemCount:  _handleItemCount(text); break;
       case FlowStep.itemName:   _handleItemName(text);  break;
       case FlowStep.itemPrice:  _handleItemPrice(text); break;
@@ -82,6 +84,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       case FlowStep.vat:        _handleVat(text, requireConfirm: true); break;
       case FlowStep.service:    _handleService(text, requireConfirm: true); break;
       case FlowStep.tip:        _handleTip(text, requireConfirm: true); break;
+      case FlowStep.discount:   _handleDiscount(text); break;
       case FlowStep.confirm:    _handleConfirm(text); break;
       case FlowStep.result:
         _bot(_s.billDone, ms: 200);
@@ -89,16 +92,23 @@ class FlowController extends Notifier<List<ChatMessage>> {
     }
   }
 
-  // ═══════════════════ STEP 1 — PEOPLE ═════════════════════════════════════
-
+  // ═══════════════════ STEP 1 — PEOPLE COUNT ══════════════════════════════
   Future<void> _start() async {
-    _setStep(FlowStep.people);
+    _setStep(FlowStep.peopleCount);
     final s = _s;
-    await _bot(
-      '${s.welcome}\n\n${s.step1Question}\n\n${s.typeOrSayNames}\n${s.namesExample}',
-    );
+    await _bot('\${s.welcome}\n\n\${s.howManyPeople}');
   }
 
+  Future<void> _handlePeopleCount(String text) async {
+    final s = _s;
+    final n = parseNumber(text)?.toInt();
+    if (n == null || n <= 0) {
+      await _bot(s.pleaseEnterValidNumber, ms: 200);
+      return;
+    }
+    _setStep(FlowStep.people);
+    await _bot('\${s.peopleCountPrompt(n)}\n\${s.namesExample}');
+  }
   Future<void> _handlePeople(String text) async {
     final s = _s;
     final low = text.toLowerCase().trim();
@@ -633,7 +643,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
     await _bot(n == 0 ? s.noTip : s.tipApplied(n), ms: 250);
     _editingFromMenu = false;
-    _showFinalConfirm();
+    _askDiscount();
   }
 
   Future<void> _handleTip(String text, {bool requireConfirm = true}) async {
@@ -642,7 +652,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
     _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
     if (_editingFromMenu) { _editingFromMenu = false; await _bot(n == 0 ? s.noTip : s.tipApplied(n), ms: 250); _showFinalConfirm(); return; }
-    if (!requireConfirm) { _showFinalConfirm(); return; }
+    if (!requireConfirm) { _askDiscount(); return; }
     await _bot(s.tipConfirm(n), chips: [
       QuickChip(label: s.yes, onTap: () { _addUser(s.yes); _showFinalConfirm(); }),
       QuickChip(label: s.change, onTap: () async {
@@ -650,6 +660,58 @@ class FlowController extends Notifier<List<ChatMessage>> {
         await _bot(s.typeTip, ms: 200);
       }),
     ]);
+  }
+
+  // ═══════════════════ STEP DISCOUNT ══════════════════════════════════════
+
+  Future<void> _askDiscount() async {
+    _setStep(FlowStep.discount);
+    final s = _s;
+    await _bot(
+      s.discountQuestion,
+      chips: [
+        QuickChip(label: s.noDiscount, onTap: () {
+          _addUser(s.noDiscount);
+          _draft.setExtras(_draftState.extras.copyWith(discountPct: 0, discountFixed: 0));
+          _showFinalConfirm();
+        }),
+        QuickChip(label: s.percentDiscount, onTap: () async {
+          await _bot(s.enterDiscountPct, ms: 200);
+        }),
+        QuickChip(label: s.fixedDiscount, onTap: () async {
+          await _bot(s.enterDiscountFixed, ms: 200);
+        }),
+      ],
+      ms: 300,
+    );
+  }
+
+  Future<void> _handleDiscount(String text) async {
+    final s = _s;
+    final low = text.toLowerCase().trim();
+    
+    if (low == 'no' || low == 'none' || low == 'لا' || low == 'بدون') {
+      _draft.setExtras(_draftState.extras.copyWith(discountPct: 0, discountFixed: 0));
+      _showFinalConfirm();
+      return;
+    }
+
+    final n = parseNumber(text);
+    if (n == null || n < 0) {
+      await _bot(s.pleaseEnterValidNumber, ms: 200);
+      return;
+    }
+
+    // Determine if percentage or fixed based on context
+    // If number is <= 100 and looks like a percentage
+    if (n <= 100 && !text.contains('\$') && !text.contains('د.')) {
+      _draft.setExtras(_draftState.extras.copyWith(discountPct: n, discountFixed: 0));
+      await _bot(s.discountPctApplied(n), ms: 250);
+    } else {
+      _draft.setExtras(_draftState.extras.copyWith(discountFixed: n, discountPct: 0));
+      await _bot(s.discountFixedApplied(n), ms: 250);
+    }
+    _showFinalConfirm();
   }
 
   // ═══════════════════ FINAL CONFIRM ═══════════════════════════════════════
