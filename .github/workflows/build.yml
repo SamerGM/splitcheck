@@ -56,6 +56,8 @@ jobs:
       - name: Rename AAB
         run: |
           mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/splitcheck-v1.0-build${{ github.run_number }}.aab
+          ls -lh build/app/outputs/bundle/release/
+          echo "AAB ready: splitcheck-v1.0-build${{ github.run_number }}.aab" 
 
       - name: Upload AAB
         uses: actions/upload-artifact@v6
