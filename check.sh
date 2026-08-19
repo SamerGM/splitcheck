@@ -37,7 +37,7 @@ ERRORS=()
 
 # 11. minSdk and targetSdk
 { grep -q "minSdk = 21" android/app/build.gradle.kts || ERRORS+=("11. minSdk not 21"); }
-{ grep -q "targetSdk = 35" android/app/build.gradle.kts || ERRORS+=("11. targetSdk not 35"); }
+{ grep -q "targetSdk = 36" android/app/build.gradle.kts || ERRORS+=("11. targetSdk not 35"); }
 
 # 12. Signing config
 { grep -q "signingConfigs" android/app/build.gradle.kts || ERRORS+=("12. Signing config missing"); }

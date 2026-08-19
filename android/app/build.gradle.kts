@@ -25,7 +25,7 @@ android {
     defaultConfig {
         applicationId = "com.samer.splitcheck"
         minSdk = 21
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
