@@ -135,4 +135,47 @@ void main() {
     expect(c.read(billDraftProvider).extras.vatPct, 5);
     expect(c.read(billDraftProvider).extras.discountPct, 10); // untouched
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('quantity, typed portions, VAT already included, place name, recent group', () async {
+    await settle();
+    await tap('2');
+    await say('Mona, Karim');
+    await tap('Yep 👍');
+    await say('1');
+    await say('Pizza');
+    expect(lastBot(), contains('2x15'));          // quantity hint on the first price
+    await say('3x10');                           // 3 slices × 10
+    expect(c.read(flowStepProvider), FlowStep.itemWho);
+    await ctl().handleInput('Mona 2, Karim');    // typed portions
+    await settle();
+    final it = c.read(billDraftProvider).items.single;
+    expect(it.price, 30);
+    expect(it.quantity, 3);
+    expect(it.portions, {id('Mona'): 2});
+    expect(lastBot(), contains('Mona ×2'));
+
+    await tap('Looks good 👍');
+    await tap('Already in prices');              // VAT included → nothing added
+    expect(c.read(billDraftProvider).extras.vatPct, 0);
+    await tap('None');                           // service
+    await tap('No tip');
+    await tap('No');                             // delivery
+    await tap('Nope');                           // discount
+    await tap('🏷 Add place name');
+    await say('Pizza Roma');
+    expect(c.read(billDraftProvider).merchant, 'Pizza Roma');
+    expect(lastBot(), contains('🏷 Pizza Roma'));
+    await tap('Split it ✨');
+    final r = c.read(splitResultProvider)!;
+    expect(r.personResults.firstWhere((x) => x.person.name == 'Mona').total, 20);
+    expect(r.personResults.firstWhere((x) => x.person.name == 'Karim').total, 10);
+
+    // Next bill offers the same group as a one-tap button.
+    await ctl().reset();
+    await settle();
+    await tap('2');
+    expect(lastBot(), contains('group from last time'));
+    await tap('Mona, Karim');
+    expect(c.read(billDraftProvider).people.map((p) => p.name), ['Mona', 'Karim']);
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

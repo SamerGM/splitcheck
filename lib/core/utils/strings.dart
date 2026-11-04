@@ -137,6 +137,43 @@ class S {
   String get noTip => _t('No tip ✓', 'بدون بقشيش ✓');
   String tipApplied(String pct) => _t('Tip $pct ✓', 'بقشيش $pct ✓');
 
+  // ── New features ───────────────────────────────────────────────────────────
+  // Recent groups (names step)
+  String get orPickRecent => _t('Or tap a group from last time 👇', 'أو اختار مجموعة من المرات اللي فاتت 👇');
+  // Quantity
+  String get priceQtyHint => _t('Ordered more than one? Type it like 2x15', 'طلبت أكتر من واحد؟ اكتب كده 2x15');
+  String qtyConfirmed(int q, String unit, String total) => _t(
+      '$q × $unit = $total', '${toArabicDigits('$q')} × $unit = $total');
+  // Portions (people picker)
+  String get portionsHint => _t('Someone had more? Use + to give them more portions.', 'حد أخد أكتر؟ دوس + عشان تزود نصيبه.');
+  // Prices already include VAT / service
+  String get alreadyIncluded => _t('Already in prices', 'محسوبة في الأسعار');
+  String get vatIncludedApplied => _t('Got it — VAT is already in the prices, nothing added ✓', 'تمام — الضريبة محسوبة في الأسعار، مش هنضيف حاجة ✓');
+  String get serviceIncludedApplied => _t('Got it — service is already in the prices, nothing added ✓', 'تمام — الخدمة محسوبة في الأسعار، مش هنضيف حاجة ✓');
+  // Place name
+  String get addPlaceName => _t('🏷 Add place name', '🏷 اسم المكان');
+  String get askPlaceName => _t('What’s the place called?', 'اسم المكان إيه؟');
+  String placeNameSaved(String name) => _t('Saved as “$name” ✓', 'اتسجل باسم «$name» ✓');
+  String get placeLabel => _t('Place', 'المكان');
+  // Rounding
+  String get roundUp => _t('Round each share up', 'تقريب نصيب كل شخص لفوق');
+  String get roundOff => _t('Off', 'لا');
+  String get roundingLabel => _t('Rounded up', 'التقريب');
+  // Per-person message
+  String personMessage(String name, String amount, String place) => _t(
+      'Hi $name 👋 Your share${place.isEmpty ? '' : ' for $place'} is $amount',
+      'أهلاً $name 👋 نصيبك${place.isEmpty ? '' : ' في $place'} هو $amount');
+  String get sendToPerson => _t('Send', 'إرسال');
+  // History
+  String get history => _t('History', 'السجل');
+  String get historyEmpty => _t('No saved bills yet', 'لسه مفيش فواتير محفوظة');
+  String get historyEmptyHint => _t('Bills you split will show up here.', 'الفواتير اللي بتقسمها هتظهر هنا.');
+  String get untitledBill => _t('Bill', 'فاتورة');
+  String get receiptPhoto => _t('Receipt photo', 'صورة الفاتورة');
+  String peopleCount(int n) => _t('$n people', _arCount(n, 'شخص', 'شخصين', 'أشخاص'));
+  String get today => _t('Today', 'النهارده');
+  String get yesterday => _t('Yesterday', 'امبارح');
+
   // ── Delivery ───────────────────────────────────────────────────────────────
   String get deliveryQuestion => _t('Any delivery fee? 🛵', 'في رسوم توصيل؟ 🛵');
   String get deliveryYes => _t('Yes', 'نعم');

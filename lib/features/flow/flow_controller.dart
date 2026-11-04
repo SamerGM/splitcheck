@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/models/models.dart';
 import '../../core/services/providers.dart';
@@ -9,6 +10,7 @@ import '../../core/services/parser_service.dart';
 import '../../core/services/split_calculator.dart';
 import '../../core/services/settings_provider.dart';
 import '../../core/utils/currency.dart';
+import '../../core/utils/number_parser.dart';
 import '../../core/utils/strings.dart';
 import 'chat_message.dart';
 
@@ -26,6 +28,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
   // Item being built
   String _pendingName  = '';
   double _pendingPrice = 0;
+  int    _pendingQty   = 1;
   int    _totalItems   = 0;
   int    _currentIndex = 0;
 
@@ -36,6 +39,9 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   // Discount
   String _discountMode = ''; // '', 'pct', 'fixed'
+
+  // Place name (asked from the final check)
+  bool _awaitingPlaceName = false;
 
   @override
   List<ChatMessage> build() {
@@ -94,8 +100,9 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   String _whoLabel(BillItem it) {
     final valid = it.personIds.where((id) => _draftState.people.any((p) => p.id == id)).toList();
-    if (valid.isEmpty || valid.length == _draftState.people.length) return _s.everyoneLower;
-    return valid.map(_nameOf).join(', ');
+    final unequal = valid.any((id) => it.portionsOf(id) > 1);
+    if (!unequal && (valid.isEmpty || valid.length == _draftState.people.length)) return _s.everyoneLower;
+    return valid.map((id) => it.portionsOf(id) > 1 ? '${_nameOf(id)} ×${it.portionsOf(id)}' : _nameOf(id)).join(', ');
   }
 
   Future<void> handleInput(String text) async {
@@ -147,7 +154,18 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _setPeopleCount(int n) async {
     _expectedPeople = n;
     _setStep(FlowStep.people);
-    await _bot('${_s.peopleCountPrompt(n)}\n${_s.namesExample}', ms: 300);
+    final groups = await _recentGroups();
+    // Groups with the same number of people first.
+    groups.sort((a, b) => (a.length == n ? 0 : 1).compareTo(b.length == n ? 0 : 1));
+    final s = _s;
+    await _bot(
+      '${s.peopleCountPrompt(n)}\n${s.namesExample}${groups.isEmpty ? '' : '\n\n${s.orPickRecent}'}',
+      chips: [
+        for (final g in groups)
+          QuickChip(label: g.join(s.isAr ? '، ' : ', '), onTap: () => _handlePeople(g.join(', '))),
+      ],
+      ms: 300,
+    );
   }
 
   Future<void> _handlePeople(String text) async {
@@ -216,10 +234,10 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final ids = _draftState.people.map((p) => p.id).toSet();
     _draft.setItems([
       for (final it in _draftState.items)
-        BillItem(id: it.id, name: it.name, price: it.price,
-            personIds: it.personIds.where(ids.contains).toList()),
+        it.copyWith(personIds: it.personIds.where(ids.contains).toList()),
     ]);
     _previousPeople = const [];
+    _saveRecentGroup(_draftState.people.map((p) => p.name).toList());
     _expectedPeople = 0;
 
     await _bot(_s.peopleConfirmed, ms: 250);
@@ -269,19 +287,24 @@ class FlowController extends Notifier<List<ChatMessage>> {
     }
     _pendingName = name;
     _setStep(FlowStep.itemPrice);
-    await _bot(_s.itemPricePrompt(name), ms: 300);
+    final hint = _draftState.items.isEmpty ? '\n${_s.priceQtyHint}' : '';
+    await _bot('${_s.itemPricePrompt(name)}$hint', ms: 300);
   }
 
   Future<void> _handleItemPrice(String text) async {
-    final price = parseNumber(text.trim());
-    if (price == null || price <= 0) {
+    final q = parseQuantityPrice(text);
+    if (q == null || q.$2 <= 0) {
       await _bot(_s.pleaseEnterValidNumber, ms: 200);
       return;
     }
-    _pendingPrice = price;
-    _editSubStep = '';
+    final (qty, unit) = q;
+    _pendingQty   = qty;
+    _pendingPrice = unit * qty;
+    _editSubStep  = '';
+    if (qty > 1) await _bot(_s.qtyConfirmed(qty, _fmt(unit), _fmt(_pendingPrice)), ms: 200);
     _setStep(FlowStep.itemWho);
-    await _bot(_s.itemWhoPrompt(_pendingName, _fmt(price)), ms: 300);
+    final label = qty > 1 ? '$_pendingName ×$qty' : _pendingName;
+    await _bot(_s.itemWhoPrompt(label, _fmt(_pendingPrice)), ms: 300);
   }
 
   /// Typed answer to "who had it?" (the picker sheet calls [confirmSelectedPeople]).
@@ -311,8 +334,17 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
     final matched = <String>[];
     final unmatched = <String>[];
-    for (final token in tokens) {
+    final portions = <String, int>{};
+    for (var token in tokens) {
+      // "Ahmed 2" / "Ahmed x2" / "أحمد ٢" → 2 portions for Ahmed.
+      final pm = RegExp(r'^(.*?)\s*[x×*]?\s*([0-9٠-٩]+)$').firstMatch(token);
+      int? n;
+      if (pm != null && pm.group(1)!.trim().isNotEmpty) {
+        n = int.tryParse(normalizeDigits(pm.group(2)!));
+        token = pm.group(1)!.trim();
+      }
       final whole = match(token);
+      if (whole != null && n != null && n > 1) portions[whole.id] = n;
       if (whole != null) {
         if (!matched.contains(whole.id)) matched.add(whole.id);
         continue;
@@ -332,7 +364,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       await _bot(s.namesNotOnBill(unmatched.join(', '), people.map((p) => p.name).join(', ')), ms: 300);
       return;
     }
-    await confirmSelectedPeople(matched);
+    await confirmSelectedPeople(matched, portions: portions);
   }
 
   /// Who should already be ticked when the picker opens (when editing an item).
@@ -344,29 +376,44 @@ class FlowController extends Notifier<List<ChatMessage>> {
     return ids.isEmpty ? _draftState.people.map((p) => p.id).toList() : ids;
   }
 
-  Future<void> confirmSelectedPeople(List<String> personIds) async {
+  /// Portions already set on the item being edited.
+  Map<String, int> get preselectedPortions =>
+      (_editSubStep == 'who' && _editingIndex >= 0 && _editingIndex < _draftState.items.length)
+          ? _draftState.items[_editingIndex].portions
+          : const {};
+
+  Future<void> confirmSelectedPeople(List<String> personIds, {Map<String, int> portions = const {}}) async {
     if (personIds.isEmpty) {
       await _bot(_s.selectAtLeastOne, ms: 200);
       return;
     }
+    final (ids, parts) = _normaliseAssignment(personIds, portions);
     if (_editSubStep == 'who' && _editingIndex >= 0) {
-      await _updateItemWho(personIds);
+      await _updateItemWho(ids, parts);
     } else {
-      await _addPendingItem(personIds);
+      await _addPendingItem(ids, parts);
     }
   }
 
-  Future<void> _addPendingItem(List<String> personIds) async {
-    // Everyone selected → store as shared (empty list) so it stays correct if people change.
-    final ids = personIds.length == _draftState.people.length ? <String>[] : personIds;
-    final item = BillItem(id: _uuid.v4(), name: _pendingName, price: _pendingPrice, personIds: ids);
+  /// Everyone with equal portions → stored as "shared" (empty list) so it stays
+  /// correct if people change. Portions of 1 are dropped (1 is the default).
+  (List<String>, Map<String, int>) _normaliseAssignment(List<String> ids, Map<String, int> portions) {
+    final parts = {for (final e in portions.entries) if (ids.contains(e.key) && e.value > 1) e.key: e.value};
+    final everyone = ids.length == _draftState.people.length;
+    return (everyone && parts.isEmpty ? <String>[] : ids, parts);
+  }
+
+  Future<void> _addPendingItem(List<String> ids, Map<String, int> portions) async {
+    final item = BillItem(id: _uuid.v4(), name: _pendingName, price: _pendingPrice,
+        quantity: _pendingQty, personIds: ids, portions: portions);
     _draft.addItem(item);
 
-    await _bot(_s.itemConfirmed(item.name, _fmt(item.price), _whoLabel(item)), ms: 200);
+    await _bot(_s.itemConfirmed(item.label, _fmt(item.price), _whoLabel(item)), ms: 200);
 
     _currentIndex++;
     _pendingName = '';
     _pendingPrice = 0;
+    _pendingQty = 1;
 
     if (_currentIndex < _totalItems) {
       await _askItemName();
@@ -390,7 +437,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _editingIndex = -1;
     final subtotal = items.fold(0.0, (sum, i) => sum + i.price);
     final list = items.asMap().entries
-        .map((e) => '${e.key + 1}. ${e.value.name} · ${_fmt(e.value.price)} → ${_whoLabel(e.value)}')
+        .map((e) => '${e.key + 1}. ${e.value.label} · ${_fmt(e.value.price)} → ${_whoLabel(e.value)}')
         .join('\n');
 
     await _bot('${s.allItemsAdded(_fmt(subtotal))}\n\n$list', chips: [
@@ -408,7 +455,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final items = _draftState.items;
     await _bot(_s.whichItemToEdit, chips: [
       for (var i = 0; i < items.length; i++)
-        QuickChip(label: '${items[i].name} · ${_fmt(items[i].price)}', onTap: () => _showItemEditOptions(i)),
+        QuickChip(label: '${items[i].label} · ${_fmt(items[i].price)}', onTap: () => _showItemEditOptions(i)),
       QuickChip(label: _s.back, onTap: _showItemSummary),
     ], ms: 200);
   }
@@ -461,25 +508,24 @@ class FlowController extends Notifier<List<ChatMessage>> {
         await _bot(_s.itemExists(name), ms: 300);
         return;
       }
-      _replaceItem((o) => BillItem(id: o.id, name: name, price: o.price, personIds: o.personIds));
+      _replaceItem((o) => o.copyWith(name: name));
       await _bot(_s.itemUpdated(name), ms: 200);
       await _showItemSummary();
     } else if (_editSubStep == 'price') {
-      final price = parseNumber(text.trim());
-      if (price == null || price <= 0) {
+      final q = parseQuantityPrice(text);
+      if (q == null || q.$2 <= 0) {
         await _bot(_s.pleaseEnterValidNumber, ms: 200);
         return;
       }
-      _replaceItem((o) => BillItem(id: o.id, name: o.name, price: price, personIds: o.personIds));
+      _replaceItem((o) => o.copyWith(price: q.$1 * q.$2, quantity: q.$1));
       await _bot(_s.itemUpdated(item.name), ms: 200);
       await _showItemSummary();
     }
   }
 
-  Future<void> _updateItemWho(List<String> personIds) async {
-    final ids = personIds.length == _draftState.people.length ? <String>[] : personIds;
+  Future<void> _updateItemWho(List<String> ids, Map<String, int> portions) async {
     final name = _draftState.items[_editingIndex].name;
-    _replaceItem((o) => BillItem(id: o.id, name: o.name, price: o.price, personIds: ids));
+    _replaceItem((o) => o.copyWith(personIds: ids, portions: portions));
     await _bot(_s.itemUpdated(name), ms: 200);
     await _showItemSummary();
   }
@@ -500,8 +546,10 @@ class FlowController extends Notifier<List<ChatMessage>> {
       }
       for (final item in result.items) {
         final name = _nameTaken(item.name) ? '${item.name} (2)' : item.name;
-        _draft.addItem(BillItem(id: _uuid.v4(), name: name, price: item.price));
+        _draft.addItem(BillItem(id: _uuid.v4(), name: name, price: item.price, quantity: item.quantity));
       }
+      if (_draftState.merchant.isEmpty && result.merchant.isNotEmpty) _draft.setMerchant(result.merchant);
+      _keepReceiptPhoto(file);
       _currentIndex = _draftState.items.length;
       _totalItems   = _currentIndex;
       await _bot(s.scannedItems(result.items.length), ms: 300);
@@ -512,10 +560,22 @@ class FlowController extends Notifier<List<ChatMessage>> {
     }
   }
 
+  /// Copies the scanned photo into app storage so it can be viewed from History.
+  Future<void> _keepReceiptPhoto(File file) async {
+    try {
+      final dir = Directory('${(await getApplicationDocumentsDirectory()).path}/receipts');
+      await dir.create(recursive: true);
+      final copy = await file.copy('${dir.path}/${_uuid.v4()}.jpg');
+      _draft.setReceiptPath(copy.path);
+    } catch (_) {/* the photo is optional */}
+  }
+
   // ═══════════════════ VAT / SERVICE / TIP ═════════════════════════════════
 
-  List<QuickChip> _pctChips(List<double> options, String noneLabel, Future<void> Function(double) apply, String customPrompt) => [
+  List<QuickChip> _pctChips(List<double> options, String noneLabel, Future<void> Function(double) apply,
+      String customPrompt, {Future<void> Function()? included}) => [
     QuickChip(label: noneLabel, onTap: () => apply(0)),
+    if (included != null) QuickChip(label: _s.alreadyIncluded, onTap: included),
     for (final n in options) QuickChip(label: _pct(n), onTap: () => apply(n)),
     QuickChip(label: _s.custom, onTap: () => _bot(customPrompt, ms: 200)),
   ];
@@ -532,7 +592,8 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _askVat() async {
     _setStep(FlowStep.vat);
     final s = _s;
-    await _bot(s.vatQuestion, chips: _pctChips([5, 10, 14, 15], s.noVatChip, _applyVat, s.typeVat));
+    await _bot(s.vatQuestion, chips: _pctChips([5, 10, 14, 15], s.noVatChip, _applyVat, s.typeVat,
+        included: () => _applyVat(0, included: true)));
   }
 
   Future<void> _handleVat(String text) async {
@@ -540,16 +601,17 @@ class FlowController extends Notifier<List<ChatMessage>> {
     if (n != null) await _applyVat(n);
   }
 
-  Future<void> _applyVat(double n) async {
+  Future<void> _applyVat(double n, {bool included = false}) async {
     _draft.setExtras(_draftState.extras.copyWith(vatPct: n));
-    await _bot(n == 0 ? _s.noVat : _s.vatApplied(_pct(n)), ms: 250);
+    await _bot(included ? _s.vatIncludedApplied : n == 0 ? _s.noVat : _s.vatApplied(_pct(n)), ms: 250);
     if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askService(); }
   }
 
   Future<void> _askService() async {
     _setStep(FlowStep.service);
     final s = _s;
-    await _bot(s.serviceQuestion, chips: _pctChips([5, 10, 12, 15], s.noServiceChip, _applyService, s.typeService));
+    await _bot(s.serviceQuestion, chips: _pctChips([5, 10, 12, 15], s.noServiceChip, _applyService, s.typeService,
+        included: () => _applyService(0, included: true)));
   }
 
   Future<void> _handleService(String text) async {
@@ -557,9 +619,9 @@ class FlowController extends Notifier<List<ChatMessage>> {
     if (n != null) await _applyService(n);
   }
 
-  Future<void> _applyService(double n) async {
+  Future<void> _applyService(double n, {bool included = false}) async {
     _draft.setExtras(_draftState.extras.copyWith(servicePct: n));
-    await _bot(n == 0 ? _s.noService : _s.serviceApplied(_pct(n)), ms: 250);
+    await _bot(included ? _s.serviceIncludedApplied : n == 0 ? _s.noService : _s.serviceApplied(_pct(n)), ms: 250);
     if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askTip(); }
   }
 
@@ -688,6 +750,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final sub  = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
     final ext  = _draftState.extras;
     final lines = [
+      if (_draftState.merchant.isNotEmpty) '🏷 ${_draftState.merchant}',
       '👥 ${_draftState.people.map((p) => p.name).join(', ')}',
       '🧾 ${s.itemsCount(_draftState.items.length)}',
       '',
@@ -703,10 +766,23 @@ class FlowController extends Notifier<List<ChatMessage>> {
     await _bot('${s.finalConfirmTitle}\n\n$lines', chips: [
       QuickChip(label: s.calculate, onTap: () async => _calcAndShow()),
       QuickChip(label: s.editBtn, onTap: _showEditMenu),
+      if (_draftState.merchant.isEmpty)
+        QuickChip(label: s.addPlaceName, onTap: () async {
+          _awaitingPlaceName = true;
+          await _bot(s.askPlaceName, ms: 200);
+        }),
     ]);
   }
 
   Future<void> _handleConfirm(String text) async {
+    if (_awaitingPlaceName) {
+      _awaitingPlaceName = false;
+      final name = text.trim();
+      _draft.setMerchant(name);
+      await _bot(_s.placeNameSaved(name), ms: 200);
+      await _showFinalConfirm();
+      return;
+    }
     final low = text.toLowerCase().trim();
     final no  = RegExp(r'\b(no|edit|change|wait)\b').hasMatch(low) || low.contains('لا') || low.contains('لأ') || low.contains('تعديل') || low.contains('عدّل') || low.contains('عدل');
     final yes = RegExp(r'\b(yes|ok|okay|go|calculate|split|good|yep|sure)\b').hasMatch(low) ||
@@ -743,6 +819,11 @@ class FlowController extends Notifier<List<ChatMessage>> {
       QuickChip(label: s.tipLabel, onTap: _askTip),
       QuickChip(label: s.deliveryLabel, onTap: _askDelivery),
       QuickChip(label: s.discountLabel, onTap: _askDiscount),
+      QuickChip(label: s.placeLabel, onTap: () async {
+        _setStep(FlowStep.confirm);
+        _awaitingPlaceName = true;
+        await _bot(s.askPlaceName, ms: 200);
+      }),
       QuickChip(label: s.back, onTap: _showFinalConfirm),
     ], ms: 200);
   }
@@ -751,6 +832,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   void _calcAndShow() {
     _setStep(FlowStep.result);
+    _draft.setExtras(_draftState.extras.copyWith(roundUpTo: ref.read(roundUpProvider)));
     final bill   = _draftState.toBill(_curr);
     final result = SplitCalculator.calculate(bill);
     ref.read(splitResultProvider.notifier).value = result;
@@ -764,7 +846,24 @@ class FlowController extends Notifier<List<ChatMessage>> {
       final svc = ref.read(historyServiceProvider);
       await svc.init();
       await svc.save(bill);
+      ref.invalidate(historyProvider);
     } catch (_) {/* history is best-effort */}
+  }
+
+  Future<List<List<String>>> _recentGroups() async {
+    try {
+      final svc = ref.read(settingsServiceProvider);
+      await svc.init();
+      return svc.loadRecentGroups();
+    } catch (_) { return []; }
+  }
+
+  Future<void> _saveRecentGroup(List<String> names) async {
+    try {
+      final svc = ref.read(settingsServiceProvider);
+      await svc.init();
+      await svc.saveRecentGroup(names);
+    } catch (_) {}
   }
 
   Future<void> reset() async {
@@ -772,6 +871,8 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _previousPeople = const [];
     _pendingName    = '';
     _pendingPrice   = 0;
+    _pendingQty     = 1;
+    _awaitingPlaceName = false;
     _totalItems     = 0;
     _currentIndex   = 0;
     _editingIndex   = -1;

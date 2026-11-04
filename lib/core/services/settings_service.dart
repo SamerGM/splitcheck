@@ -8,6 +8,8 @@ class SettingsService {
   static const _themeKey    = 'theme_mode';
   static const _languageKey = 'language';
   static const _currencyKey = 'currency';
+  static const _roundKey    = 'round_up_to';
+  static const _groupsKey   = 'recent_groups';
 
   late SharedPreferences _prefs;
 
@@ -52,5 +54,25 @@ class SettingsService {
 
   Future<void> saveCurrency(String code) async {
     await _prefs.setString(_currencyKey, code);
+  }
+
+  // ── Round each share up (0 = off) ──────────────────────────────────────────
+
+  double loadRoundUpTo() => _prefs.getDouble(_roundKey) ?? 0;
+  Future<void> saveRoundUpTo(double v) async => _prefs.setDouble(_roundKey, v);
+
+  // ── Recent groups of people (most recent first) ────────────────────────────
+
+  List<List<String>> loadRecentGroups() => (_prefs.getStringList(_groupsKey) ?? const [])
+      .map((g) => g.split('\u001f').where((n) => n.isNotEmpty).toList())
+      .where((g) => g.isNotEmpty)
+      .toList();
+
+  Future<void> saveRecentGroup(List<String> names) async {
+    String key(List<String> g) => ([...g.map((n) => n.toLowerCase())]..sort()).join('|');
+    final groups = loadRecentGroups()..removeWhere((g) => key(g) == key(names));
+    groups.insert(0, names);
+    await _prefs.setStringList(
+        _groupsKey, groups.take(3).map((g) => g.join('\u001f')).toList());
   }
 }

@@ -1,21 +1,25 @@
 // lib/core/services/ocr_service.dart
 // Uses Google Cloud Vision API for high-accuracy OCR
-// Falls back to ML Kit if API fails
+// Falls back to on-device ML Kit (Latin script only) if the API is unavailable.
+// Arabic receipts need Cloud Vision (languageHints: en, ar).
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image/image.dart' as img;
 import 'parser_service.dart';
+import 'receipt_parser.dart';
 
 class OcrResult {
   final String rawText;
   final List<ParsedItem> items;
   final bool isArabic;
+  final String merchant;
   const OcrResult({
     required this.rawText,
     required this.items,
     required this.isArabic,
+    this.merchant = '',
   });
 }
 
@@ -46,9 +50,9 @@ class OcrService {
     }
 
     final isArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(rawText);
-    final items = _parseReceiptText(rawText);
+    final parsed = ReceiptParser.parse(rawText);
 
-    return OcrResult(rawText: rawText, items: items, isArabic: isArabic);
+    return OcrResult(rawText: rawText, items: parsed.items, isArabic: isArabic, merchant: parsed.merchant);
   }
 
   Future<String> _cloudVisionOcr(File imageFile) async {
@@ -121,57 +125,6 @@ class OcrService {
     } catch (e) {
       return imageFile;
     }
-  }
-
-  List<ParsedItem> _parseReceiptText(String text) {
-    final lines = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
-    final items = <ParsedItem>[];
-
-    final skipKeywords = RegExp(
-      r'\b(total|subtotal|sub.?total|tax|vat|trn|service|tip|gratuity|discount|change|cash|card|visa|mastercard|receipt|invoice|bill|table|order|check|guest|cover|server|cashier|date|time|tel|phone|thank|welcome|visit|amount|balance|due|paid|tender|qty)\b',
-      caseSensitive: false,
-    );
-
-    for (final line in lines) {
-      if (skipKeywords.hasMatch(line)) continue;
-      if (line.length < 3) continue;
-      final item = _tryParseLine(line);
-      if (item != null) items.add(item);
-    }
-
-    final seen = <String>{};
-    return items.where((item) => seen.add(item.name.toLowerCase())).toList();
-  }
-
-  ParsedItem? _tryParseLine(String line) {
-    final patterns = [
-      RegExp(r'^(.+?)\s*[.\-_]{3,}\s*(\d+[\.,]\d{1,2})\s*$'),
-      RegExp(r'^(.+?)\s{2,}(\d+[\.,]\d{1,2})\s*$'),
-      RegExp(r'^(.+?)\s+(\d+[\.,]\d{1,2})\s*$'),
-      RegExp(r'^(\d+[\.,]\d{1,2})\s+(.+)$'),
-      // (Bare integers like "Table 12" are deliberately NOT treated as prices.)
-    ];
-
-    for (int i = 0; i < patterns.length; i++) {
-      final match = patterns[i].firstMatch(line);
-      if (match != null) {
-        String name, priceStr;
-        if (i == 3) {
-          priceStr = match.group(1)!;
-          name = match.group(2)!;
-        } else {
-          name = match.group(1)!;
-          priceStr = match.group(2)!;
-        }
-        name = name.replaceAll(RegExp(r'^\d+\s*[xX]\s*'), '').replaceAll(RegExp(r'[*|#@]'), '').trim();
-        final price = double.tryParse(priceStr.replaceAll(',', '.'));
-        final hasLetters = RegExp(r'[A-Za-z\u0600-\u06FF]').hasMatch(name);
-        if (hasLetters && price != null && price > 0 && price < 10000) {
-          return ParsedItem(name: name, price: price, personNames: const []);
-        }
-      }
-    }
-    return null;
   }
 
   void dispose() => _recognizer.close();

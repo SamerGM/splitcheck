@@ -82,6 +82,24 @@ final currencyProvider = NotifierProvider<CurrencyNotifier, String>(
   CurrencyNotifier.new,
 );
 
+// ── Round each share up ───────────────────────────────────────────────────────
+
+class RoundUpNotifier extends Notifier<double> {
+  @override
+  double build() => 0;
+
+  Future<void> init() async {
+    state = ref.read(settingsServiceProvider).loadRoundUpTo();
+  }
+
+  Future<void> set(double v) async {
+    state = v;
+    await ref.read(settingsServiceProvider).saveRoundUpTo(v);
+  }
+}
+
+final roundUpProvider = NotifierProvider<RoundUpNotifier, double>(RoundUpNotifier.new);
+
 // ── Strings ───────────────────────────────────────────────────────────────────
 
 final stringsProvider = Provider<S>((ref) {

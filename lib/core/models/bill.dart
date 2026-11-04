@@ -11,6 +11,7 @@ class Bill {
   final List<Person> people;
   final List<BillItem> items;
   final BillExtras extras;
+  final String? receiptPath; // photo of the scanned receipt, if any
 
   const Bill({
     required this.id,
@@ -20,6 +21,7 @@ class Bill {
     required this.people,
     required this.items,
     required this.extras,
+    this.receiptPath,
   });
 
   double get subtotal => items.fold(0, (s, i) => s + i.price);
@@ -33,6 +35,7 @@ class Bill {
     'people': people.map((p) => p.toJson()).toList(),
     'items': items.map((i) => i.toJson()).toList(),
     'extras': extras.toJson(),
+    if (receiptPath != null) 'receiptPath': receiptPath,
   };
 
   factory Bill.fromJson(Map<String, dynamic> j) => Bill(
@@ -43,5 +46,6 @@ class Bill {
     people: (j['people'] as List).map((e) => Person.fromJson(e as Map<String, dynamic>)).toList(),
     items:  (j['items']  as List).map((e) => BillItem.fromJson(e as Map<String, dynamic>)).toList(),
     extras: BillExtras.fromJson(j['extras'] as Map<String, dynamic>),
+    receiptPath: j['receiptPath'] as String?,
   );
 }

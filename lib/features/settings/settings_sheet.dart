@@ -29,6 +29,7 @@ class _SettingsBody extends ConsumerWidget {
     final lang     = ref.watch(languageProvider);
     final theme    = ref.watch(themeProvider);
     final currency = ref.watch(currencyProvider);
+    final roundUp  = ref.watch(roundUpProvider);
 
     Widget label(String t) => Padding(
       padding: const EdgeInsetsDirectional.only(start: 4, bottom: 8, top: 18),
@@ -80,6 +81,24 @@ class _SettingsBody extends ConsumerWidget {
           ),
         ),
 
+        label(s.roundUp),
+        SizedBox(
+          width: double.infinity,
+          child: CupertinoSlidingSegmentedControl<double>(
+            groupValue: roundUp,
+            children: {
+              0.0: _segText(s.roundOff),
+              for (final v in const [0.5, 1.0, 5.0, 10.0])
+                v: _segText(s.fmtNum(v, decimals: v == v.roundToDouble() ? 0 : 1)),
+            },
+            onValueChanged: (v) {
+              if (v == null) return;
+              HapticFeedback.selectionClick();
+              ref.read(roundUpProvider.notifier).set(v);
+            },
+          ),
+        ),
+
         label(s.currency),
         InsetGroup(inSheet: true, separatorInset: 16, children: [
           for (final code in kCurrencies.keys)
@@ -109,6 +128,9 @@ class _SettingsBody extends ConsumerWidget {
       ]),
     );
   }
+
+  static Widget _segText(String text) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8), child: Text(text));
 
   static Widget _seg(IconData icon, String text) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),

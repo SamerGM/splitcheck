@@ -33,11 +33,13 @@ class ParsedItem {
   final String name;
   final double price;
   final List<String> personNames;
+  final int quantity;
 
   const ParsedItem({
     required this.name,
     required this.price,
     required this.personNames,
+    this.quantity = 1,
   });
 }
 
@@ -149,4 +151,18 @@ double? parseNumber(String input) {
   // Normalize Arabic-Indic digits then try word-to-number conversion
   final normalized = normalizeDigits(lower.replaceAll('%', '').trim());
   return parseNumberFromText(normalized);
+}
+
+/// Parses a price that may include a quantity: "15" → (1, 15),
+/// "2x15" / "2 x 15" / "2×15" / "2*15" / "٢×١٥" → (2, 15). Returns null if invalid.
+(int, double)? parseQuantityPrice(String input) {
+  final t = normalizeDigits(input.trim().toLowerCase());
+  final m = RegExp(r'^(\d{1,3})\s*[x×*]\s*(\d+(?:[.,]\d+)?)$').firstMatch(t);
+  if (m != null) {
+    final q = int.parse(m.group(1)!);
+    final unit = double.tryParse(m.group(2)!.replaceAll(',', '.'));
+    if (q >= 1 && unit != null) return (q, unit);
+  }
+  final price = parseNumber(input);
+  return price == null ? null : (1, price);
 }

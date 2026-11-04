@@ -72,6 +72,7 @@ class _AppInitState extends ConsumerState<_AppInit> {
     await ref.read(themeProvider.notifier).init();
     await ref.read(languageProvider.notifier).init();
     await ref.read(currencyProvider.notifier).init();
+    await ref.read(roundUpProvider.notifier).init();
     if (mounted) setState(() => _ready = true);
   }
 

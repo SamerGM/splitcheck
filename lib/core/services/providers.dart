@@ -43,6 +43,7 @@ class _BillNotifier extends Notifier<Bill?> {
 class BillDraftNotifier extends Notifier<BillDraft> {
   @override BillDraft build() => BillDraft.empty();
   void setMerchant(String v) => state = state.copyWith(merchant: v);
+  void setReceiptPath(String v) => state = state.copyWith(receiptPath: v);
   void setPeople(List<Person> v) => state = state.copyWith(people: v);
   void addItem(BillItem item) => state = state.copyWith(items: [...state.items, item]);
   void removeLastItem() {

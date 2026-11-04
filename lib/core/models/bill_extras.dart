@@ -6,6 +6,7 @@ class BillExtras {
   final double discountPct;   // e.g. 10.0 means 10% off subtotal
   final double discountFixed; // e.g. 50.0 means 50 off subtotal
   final double deliveryFee;   // fixed amount, split equally between everyone
+  final double roundUpTo;     // round each share up to this step (0 = off), e.g. 1 or 5
 
   const BillExtras({
     this.vatPct = 0,
@@ -14,6 +15,7 @@ class BillExtras {
     this.discountPct = 0,
     this.discountFixed = 0,
     this.deliveryFee = 0,
+    this.roundUpTo = 0,
   });
 
   factory BillExtras.empty() => const BillExtras();
@@ -41,7 +43,7 @@ class BillExtras {
 
   BillExtras copyWith({
     double? vatPct, double? servicePct, double? tipPct,
-    double? discountPct, double? discountFixed, double? deliveryFee,
+    double? discountPct, double? discountFixed, double? deliveryFee, double? roundUpTo,
   }) => BillExtras(
     vatPct:        vatPct        ?? this.vatPct,
     servicePct:    servicePct    ?? this.servicePct,
@@ -49,12 +51,13 @@ class BillExtras {
     discountPct:   discountPct   ?? this.discountPct,
     discountFixed: discountFixed ?? this.discountFixed,
     deliveryFee:   deliveryFee   ?? this.deliveryFee,
+    roundUpTo:     roundUpTo     ?? this.roundUpTo,
   );
 
   Map<String, dynamic> toJson() => {
     'vatPct': vatPct, 'servicePct': servicePct, 'tipPct': tipPct,
     'discountPct': discountPct, 'discountFixed': discountFixed,
-    'deliveryFee': deliveryFee,
+    'deliveryFee': deliveryFee, 'roundUpTo': roundUpTo,
   };
 
   factory BillExtras.fromJson(Map<String, dynamic> j) => BillExtras(
@@ -64,5 +67,6 @@ class BillExtras {
     discountPct:   (j['discountPct']   as num? ?? 0).toDouble(),
     discountFixed: (j['discountFixed'] as num? ?? 0).toDouble(),
     deliveryFee:   (j['deliveryFee']   as num? ?? 0).toDouble(),
+    roundUpTo:     (j['roundUpTo']     as num? ?? 0).toDouble(),
   );
 }

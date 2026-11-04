@@ -11,12 +11,14 @@ class BillDraft {
   final List<Person> people;
   final List<BillItem> items;
   final BillExtras extras;
+  final String? receiptPath;
 
   const BillDraft({
     this.merchant = '',
     this.people = const [],
     this.items = const [],
     required this.extras,
+    this.receiptPath,
   });
 
   factory BillDraft.empty() => BillDraft(extras: BillExtras.empty());
@@ -26,11 +28,13 @@ class BillDraft {
     List<Person>? people,
     List<BillItem>? items,
     BillExtras? extras,
+    String? receiptPath,
   }) => BillDraft(
     merchant: merchant ?? this.merchant,
     people:   people   ?? this.people,
     items:    items    ?? this.items,
     extras:   extras   ?? this.extras,
+    receiptPath: receiptPath ?? this.receiptPath,
   );
 
   Bill toBill(String currency) => Bill(
@@ -41,6 +45,7 @@ class BillDraft {
     people: people,
     items: items,
     extras: extras,
+    receiptPath: receiptPath,
   );
 }
 
@@ -75,6 +80,8 @@ class SplitResult {
   final double serviceAmount;
   final double tipAmount;
   final double deliveryFee;
+  /// Extra added by "round each share up" (0 when off).
+  final double roundingExtra;
   final double grandTotal;
   final List<PersonResult> personResults;
 
@@ -85,6 +92,7 @@ class SplitResult {
     required this.serviceAmount,
     required this.tipAmount,
     this.deliveryFee = 0,
+    this.roundingExtra = 0,
     required this.grandTotal,
     required this.personResults,
   });

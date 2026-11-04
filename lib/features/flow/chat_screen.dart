@@ -15,6 +15,7 @@ import '../../core/services/voice_service.dart';
 import '../../core/utils/strings.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
+import '../history/history_screen.dart';
 import '../result/result_card.dart';
 import '../settings/settings_sheet.dart';
 import 'chat_message.dart';
@@ -178,16 +179,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_pickerOpen) return;
     _pickerOpen = true;
     final people = ref.read(billDraftProvider).people;
-    final preselected = ref.read(chatProvider.notifier).preselectedIds;
-    final ids = await showAppleSheet<List<String>>(
+    final ctl = ref.read(chatProvider.notifier);
+    final picked = await showAppleSheet<PickResult>(
       context: context,
       title: ref.read(stringsProvider).selectPeople,
       isDismissible: false,
-      builder: (_) => PeoplePicker(people: people, initial: preselected),
+      builder: (_) => PeoplePicker(people: people, initial: ctl.preselectedIds,
+          initialPortions: ctl.preselectedPortions),
     );
     _pickerOpen = false;
-    if (ids != null) {
-      await ref.read(chatProvider.notifier).confirmSelectedPeople(ids);
+    if (picked != null) {
+      await ctl.confirmSelectedPeople(picked.ids, portions: picked.portions);
       _scrollToBottom();
     }
   }
@@ -279,6 +281,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   title: s.appName,
                   onRestart: _confirmRestart,
                   onSettings: () => showSettingsSheet(context),
+                  onHistory: () => Navigator.of(context).push(
+                      CupertinoPageRoute(builder: (_) => const HistoryScreen())),
                 ),
               ),
             ]),
@@ -314,9 +318,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 class _NavBar extends StatelessWidget {
   final double height, progress;
   final String title;
-  final VoidCallback onRestart, onSettings;
+  final VoidCallback onRestart, onSettings, onHistory;
   const _NavBar({required this.height, required this.progress, required this.title,
-      required this.onRestart, required this.onSettings});
+      required this.onRestart, required this.onSettings, required this.onHistory});
 
   @override
   Widget build(BuildContext context) {
@@ -333,13 +337,9 @@ class _NavBar extends StatelessWidget {
             border: Border(bottom: BorderSide(color: p.separator, width: 0.33)),
           ),
           child: Stack(children: [
-            Row(children: [
-              CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                onPressed: onRestart,
-                child: Icon(CupertinoIcons.arrow_counterclockwise, color: p.accent, size: 22),
-              ),
-              Expanded(
+            // Title stays centred no matter how many buttons sit on each side.
+            Positioned.fill(
+              child: IgnorePointer(
                 child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                   const AppGlyph(size: 26),
                   const SizedBox(width: 8),
@@ -347,8 +347,21 @@ class _NavBar extends StatelessWidget {
                     fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.4, color: p.label)),
                 ]),
               ),
+            ),
+            Row(children: [
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
+                onPressed: onRestart,
+                child: Icon(CupertinoIcons.arrow_counterclockwise, color: p.accent, size: 22),
+              ),
+              const Spacer(),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                onPressed: onHistory,
+                child: Icon(CupertinoIcons.clock, color: p.accent, size: 23),
+              ),
+              CupertinoButton(
+                padding: const EdgeInsetsDirectional.only(start: 6, end: 14),
                 onPressed: onSettings,
                 child: Icon(CupertinoIcons.ellipsis_circle, color: p.accent, size: 24),
               ),
@@ -617,21 +630,34 @@ class _InputBar extends StatelessWidget {
 
 // ── PEOPLE PICKER (sheet body) ────────────────────────────────────────────────
 
+/// What the picker returns: who had the item, and how many portions each.
+typedef PickResult = ({List<String> ids, Map<String, int> portions});
+
 class PeoplePicker extends ConsumerStatefulWidget {
   final List<Person> people;
   final List<String> initial;
-  const PeoplePicker({super.key, required this.people, this.initial = const []});
+  final Map<String, int> initialPortions;
+  const PeoplePicker({super.key, required this.people, this.initial = const [],
+      this.initialPortions = const {}});
   @override ConsumerState<PeoplePicker> createState() => _PeoplePickerState();
 }
 
 class _PeoplePickerState extends ConsumerState<PeoplePicker> {
   late final Set<String> _sel = {...widget.initial};
+  late final Map<String, int> _portions = {...widget.initialPortions};
 
   bool get _all => _sel.length == widget.people.length;
 
   void _toggle(String id) {
     HapticFeedback.selectionClick();
-    setState(() => _sel.contains(id) ? _sel.remove(id) : _sel.add(id));
+    setState(() {
+      if (_sel.contains(id)) { _sel.remove(id); _portions.remove(id); } else { _sel.add(id); }
+    });
+  }
+
+  void _bump(String id, int by) {
+    HapticFeedback.selectionClick();
+    setState(() => _portions[id] = ((_portions[id] ?? 1) + by).clamp(1, 20));
   }
 
   @override
@@ -657,7 +683,10 @@ class _PeoplePickerState extends ConsumerState<PeoplePicker> {
               selected: _all,
               onTap: () {
                 HapticFeedback.selectionClick();
-                setState(() => _all ? _sel.clear() : _sel.addAll(widget.people.map((e) => e.id)));
+                setState(() {
+                  if (_all) { _sel.clear(); _portions.clear(); }
+                  else { _sel.addAll(widget.people.map((e) => e.id)); }
+                });
               },
             ),
             for (final person in widget.people)
@@ -665,18 +694,30 @@ class _PeoplePickerState extends ConsumerState<PeoplePicker> {
                 leading: Avatar(person: person, size: 34),
                 title: person.name,
                 selected: _sel.contains(person.id),
+                portions: _sel.contains(person.id) ? (_portions[person.id] ?? 1) : null,
+                onMinus: () => _bump(person.id, -1),
+                onPlus: () => _bump(person.id, 1),
                 onTap: () => _toggle(person.id),
               ),
           ],
         ),
       ),
+      if (_sel.length > 1)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(s.portionsHint, textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: p.secondary)),
+        ),
       const SizedBox(height: 16),
       AppleButton(
         label: s.confirm,
         onTap: _sel.isEmpty ? null : () {
           HapticFeedback.lightImpact();
-          // Keep the original order of people.
-          Navigator.pop(context, [for (final pp in widget.people) if (_sel.contains(pp.id)) pp.id]);
+          final ids = [for (final pp in widget.people) if (_sel.contains(pp.id)) pp.id];
+          Navigator.pop<PickResult>(context, (
+            ids: ids,
+            portions: {for (final id in ids) if ((_portions[id] ?? 1) > 1) id: _portions[id]!},
+          ));
         },
       ),
     ]);
@@ -687,12 +728,23 @@ class _PickRow extends StatelessWidget {
   final Widget leading;
   final String title;
   final bool selected;
+  final int? portions;            // shown as a − n + stepper when not null
   final VoidCallback onTap;
-  const _PickRow({required this.leading, required this.title, required this.selected, required this.onTap});
+  final VoidCallback? onMinus, onPlus;
+  const _PickRow({required this.leading, required this.title, required this.selected,
+      required this.onTap, this.portions, this.onMinus, this.onPlus});
 
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
+    Widget stepBtn(IconData icon, VoidCallback? cb, bool enabled) => PressableScale(
+      onTap: enabled ? cb : null,
+      child: Container(
+        width: 30, height: 30,
+        decoration: BoxDecoration(color: p.fill, shape: BoxShape.circle),
+        child: Icon(icon, size: 15, color: enabled ? p.accent : p.tertiary),
+      ),
+    );
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -702,6 +754,17 @@ class _PickRow extends StatelessWidget {
           leading,
           const SizedBox(width: 12),
           Expanded(child: Text(title, style: TextStyle(fontSize: 17, letterSpacing: -0.4, color: p.label))),
+          if (portions != null) ...[
+            stepBtn(CupertinoIcons.minus, onMinus, portions! > 1),
+            SizedBox(
+              width: 34,
+              child: Text('×$portions', textAlign: TextAlign.center, style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w600,
+                color: portions! > 1 ? p.accent : p.secondary)),
+            ),
+            stepBtn(CupertinoIcons.plus, onPlus, true),
+            const SizedBox(width: 10),
+          ],
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 150),
             transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
