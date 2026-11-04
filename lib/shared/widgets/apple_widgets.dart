@@ -172,43 +172,17 @@ class Avatar extends StatelessWidget {
   }
 }
 
-/// The app mark: rounded "squircle" with a gradient and a split-circle glyph.
+/// The app mark — the launcher icon itself, so the two always match.
 class AppGlyph extends StatelessWidget {
   final double size;
   const AppGlyph({super.key, this.size = 28});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size, height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(size * 0.2237), // iOS icon corner ratio
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter, end: Alignment.bottomCenter,
-          colors: [Color(0xFF4CD964), Color(0xFF0FA968)],
-        ),
-      ),
-      child: CustomPaint(painter: _SplitGlyphPainter()),
-    );
-  }
-}
-
-class _SplitGlyphPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white..isAntiAlias = true;
-    final c = size.center(Offset.zero);
-    final r = size.width * 0.27;
-    final gap = size.width * 0.045;
-    // Left half, nudged left/down; right half nudged right/up → "split" look.
-    canvas.drawArc(Rect.fromCircle(center: c.translate(-gap, gap * 0.6), radius: r),
-        1.5708, 3.1416, true, paint);
-    canvas.drawArc(Rect.fromCircle(center: c.translate(gap, -gap * 0.6), radius: r),
-        -1.5708, 3.1416, true, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) => Image.asset(
+        'assets/icon/icon.png',
+        width: size, height: size,
+        filterQuality: FilterQuality.medium,
+      );
 }
 
 /// iOS-style bottom sheet: grabber, title, rounded top corners, grouped bg.
