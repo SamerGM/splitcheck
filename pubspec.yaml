@@ -39,6 +39,9 @@ dependencies:
   # Animations
   flutter_animate: ^4.5.0
 
+  # iOS-style SF Symbols-like icons
+  cupertino_icons: ^1.0.8
+
   # Spacing utility
   gap: ^3.0.1
 
@@ -65,5 +68,7 @@ flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "assets/icon/icon_background.png"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
   min_sdk_android: 21
   generate: true

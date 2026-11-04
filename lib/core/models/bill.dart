@@ -23,7 +23,7 @@ class Bill {
   });
 
   double get subtotal => items.fold(0, (s, i) => s + i.price);
-  double get grandTotal => subtotal + extras.totalExtras(subtotal);
+  double get grandTotal => extras.grandTotal(subtotal);
 
   Map<String, dynamic> toJson() => {
     'id': id,

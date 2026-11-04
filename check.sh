@@ -10,7 +10,7 @@ ERRORS=()
 # 2. Key Android files exist
 { ls android/app/build.gradle.kts android/settings.gradle.kts android/app/src/main/kotlin/com/samer/splitcheck/MainActivity.kt > /dev/null 2>&1 || ERRORS+=("2. Missing key Android files"); }
 
-# 3. speech_to_text disabled
+# 3. speech_to_text dependency present
 { grep -q "speech_to_text" pubspec.yaml || ERRORS+=("3. speech_to_text missing from pubspec"); }
 
 # 4. Gradle newDsl=false

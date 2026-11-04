@@ -1,6 +1,8 @@
 // lib/main.dart
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -16,8 +18,9 @@ void main() async {
   ]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
   ));
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   await Hive.initFlutter();
   runApp(const ProviderScope(child: SplitCheckApp()));
 }
@@ -37,6 +40,13 @@ class SplitCheckApp extends ConsumerWidget {
       darkTheme:  AppTheme.dark,
       themeMode:  themeMode,
       locale: Locale(language),
+      // Enables right-to-left layout + Arabic system text in Arabic mode.
+      supportedLocales: const [Locale('en'), Locale('ar')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
       home: const _AppInit(),
     );
   }
@@ -61,15 +71,14 @@ class _AppInitState extends ConsumerState<_AppInit> {
   Future<void> _load() async {
     await ref.read(themeProvider.notifier).init();
     await ref.read(languageProvider.notifier).init();
+    await ref.read(currencyProvider.notifier).init();
     if (mounted) setState(() => _ready = true);
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CupertinoActivityIndicator(radius: 14)));
     }
     return const ChatScreen();
   }

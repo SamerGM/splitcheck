@@ -1,19 +1,24 @@
+// lib/features/flow/chat_screen.dart
 import 'dart:io';
+import 'dart:ui';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:gap/gap.dart';
 
 import '../../core/models/models.dart';
 import '../../core/services/providers.dart';
 import '../../core/services/settings_provider.dart';
 import '../../core/services/voice_service.dart';
+import '../../core/utils/strings.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/apple_widgets.dart';
+import '../result/result_card.dart';
+import '../settings/settings_sheet.dart';
 import 'chat_message.dart';
 import 'flow_controller.dart';
-import '../result/result_card.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -25,9 +30,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _ctrl   = TextEditingController();
   final _scroll = ScrollController();
   final _focus  = FocusNode();
-  bool _isRec      = false;
-  String _live     = '';
-  bool _voiceRetried = false;
+  bool   _isRec = false;
+  String _live  = '';
+  bool   _voiceRetried = false;
+  bool   _pickerOpen = false;
 
   @override
   void dispose() {
@@ -39,580 +45,455 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.animateTo(_scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
       }
     });
   }
 
   Future<void> _send() async {
-    final v = _ctrl.text.trim(); if (v.isEmpty) return;
+    final v = _ctrl.text.trim();
+    if (v.isEmpty) return;
+    HapticFeedback.lightImpact();
     _ctrl.clear();
     await ref.read(chatProvider.notifier).handleInput(v);
     _scrollToBottom();
   }
 
+  // ── Receipt scan ───────────────────────────────────────────────────────────
   Future<void> _pickImage() async {
-    final source = await showModalBottomSheet<ImageSource>(
+    final s = ref.read(stringsProvider);
+    final source = await showCupertinoModalPopup<ImageSource>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            leading: const Icon(Icons.camera_alt),
-            title: const Text('Take a photo'),
-            onTap: () => Navigator.pop(ctx, ImageSource.camera),
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(s.scanReceiptTitle),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, ImageSource.camera),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(CupertinoIcons.camera, size: 20), const SizedBox(width: 8), Text(s.takePhoto),
+            ]),
           ),
-          ListTile(
-            leading: const Icon(Icons.photo_library),
-            title: const Text('Choose from gallery'),
-            onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx, ImageSource.gallery),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              const Icon(CupertinoIcons.photo_on_rectangle, size: 20), const SizedBox(width: 8), Text(s.chooseGallery),
+            ]),
           ),
-        ]),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(ctx),
+          child: Text(s.cancel),
+        ),
       ),
     );
     if (source == null) return;
-    final picker = ImagePicker();
-    final xf = await picker.pickImage(source: source, imageQuality: 85);
+    final xf = await ImagePicker().pickImage(source: source, imageQuality: 85);
     if (xf == null) return;
     await ref.read(chatProvider.notifier).handleOcrFile(File(xf.path));
     _scrollToBottom();
   }
 
+  // ── Voice ──────────────────────────────────────────────────────────────────
   Future<void> _toggleVoice() async {
     final voice  = ref.read(voiceServiceProvider);
     final locale = ref.read(voiceLocaleProvider);
+    HapticFeedback.mediumImpact();
     if (_isRec) {
       await voice.stop();
       setState(() => _isRec = false);
-    } else {
-      setState(() { _isRec = true; _live = ''; _ctrl.text = ''; });
-      await voice.listen(
-        locale: locale,
-        onResult: (text, isFinal) {
-          setState(() => _live = text);
-        },
-        onDone: () async {
-          if (!mounted) return;
-          setState(() => _isRec = false);
-          final heard = _live.trim();
-          if (heard.isEmpty) {
-            // First try failed - beep and retry once
-            if (!_voiceRetried) {
-              _voiceRetried = true;
-              // Play system sound as beep feedback
-              await SystemSound.play(SystemSoundType.click);
-              await Future.delayed(const Duration(milliseconds: 800));
-              if (mounted) {
-                setState(() { _isRec = false; _live = ''; });
-                await _toggleVoice();
-              }
-            } else {
-              // Second try also failed - stop mic and notify
-              _voiceRetried = false;
-              final voice = ref.read(voiceServiceProvider);
-              await voice.cancel();
-              if (mounted) {
-                setState(() { _isRec = false; _live = ''; });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Couldn't hear you. Please record again or type your answer."),
-                    duration: Duration(seconds: 3),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            }
-            return;
-          }
-          _voiceRetried = false;
-          // Show confirmation dialog
-          await _showVoiceConfirmation(heard);
-        },
-      );
+      return;
     }
+    setState(() { _isRec = true; _live = ''; _ctrl.text = ''; });
+    await voice.listen(
+      locale: locale,
+      onResult: (text, isFinal) => setState(() => _live = text),
+      onDone: () async {
+        if (!mounted) return;
+        setState(() => _isRec = false);
+        final heard = _live.trim();
+        if (heard.isEmpty) {
+          if (!_voiceRetried) {
+            _voiceRetried = true; // retry once automatically
+            await SystemSound.play(SystemSoundType.click);
+            await Future.delayed(const Duration(milliseconds: 800));
+            if (mounted) await _toggleVoice();
+          } else {
+            _voiceRetried = false;
+            await voice.cancel();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(ref.read(stringsProvider).couldntHear)),
+              );
+            }
+          }
+          return;
+        }
+        _voiceRetried = false;
+        await _showVoiceConfirmation(heard);
+      },
+    );
   }
 
   Future<void> _showVoiceConfirmation(String heard) async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final accent = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
-    final editController = TextEditingController(text: heard);
-
-    await showModalBottomSheet(
+    final s = ref.read(stringsProvider);
+    final edit = TextEditingController(text: heard);
+    final result = await showAppleSheet<String>(
       context: context,
-      isScrollControlled: true,
+      title: s.iHeard,
+      builder: (ctx) {
+        final p = Palette.of(ctx);
+        return Column(mainAxisSize: MainAxisSize.min, children: [
+          CupertinoTextField(
+            controller: edit,
+            autofocus: false,
+            minLines: 1, maxLines: 3,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            style: TextStyle(fontSize: 17, color: p.label),
+            decoration: BoxDecoration(color: p.fill, borderRadius: BorderRadius.circular(12)),
+          ),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: AppleButton(
+              label: s.tryAgain, icon: CupertinoIcons.arrow_counterclockwise, filled: false,
+              onTap: () => Navigator.pop(ctx, '\u0000retry'),
+            )),
+            const SizedBox(width: 10),
+            Expanded(child: AppleButton(
+              label: s.send, icon: CupertinoIcons.arrow_up,
+              onTap: () => Navigator.pop(ctx, edit.text.trim()),
+            )),
+          ]),
+        ]);
+      },
+    );
+    edit.dispose();
+    if (!mounted || result == null) return;
+    if (result == '\u0000retry') { await _toggleVoice(); return; }
+    if (result.isNotEmpty) { _ctrl.text = result; await _send(); }
+  }
+
+  // ── Who-had-it picker ──────────────────────────────────────────────────────
+  Future<void> _openPeoplePicker() async {
+    if (_pickerOpen) return;
+    _pickerOpen = true;
+    final people = ref.read(billDraftProvider).people;
+    final preselected = ref.read(chatProvider.notifier).preselectedIds;
+    final ids = await showAppleSheet<List<String>>(
+      context: context,
+      title: ref.read(stringsProvider).selectPeople,
       isDismissible: false,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-          child: Container(
-            decoration: BoxDecoration(
-              color: isDark ? AppTheme.darkSurface : AppTheme.lightSurface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-            ),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              // Handle bar
-              Container(
-                width: 40, height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white24 : Colors.black12,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Text('I heard:', style: TextStyle(
-                fontSize: 13, color: isDark ? Colors.white54 : Colors.black45)),
-              const SizedBox(height: 8),
-              // Editable text field
-              TextField(
-                controller: editController,
-                style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : Colors.black87),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: accent.withValues(alpha: 0.3)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: accent.withValues(alpha: 0.3)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: accent, width: 1.5),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                ),
-                maxLines: 3,
-                minLines: 1,
-              ),
-              const SizedBox(height: 12),
-              // Buttons
-              Row(children: [
-                // Try again
-                Expanded(child: GestureDetector(
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    _toggleVoice();
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: isDark ? Colors.white12 : Colors.black12),
-                    ),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.refresh, size: 16, color: isDark ? Colors.white54 : Colors.black45),
-                      const SizedBox(width: 6),
-                      Text('Try again', style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white54 : Colors.black45)),
-                    ]),
-                  ),
-                )),
-                const SizedBox(width: 10),
-                // Confirm
-                Expanded(child: GestureDetector(
-                  onTap: () {
-                    final text = editController.text.trim();
-                    Navigator.pop(ctx);
-                    if (text.isNotEmpty) {
-                      setState(() => _ctrl.text = text);
-                      _send();
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Icon(Icons.check, size: 16, color: Colors.white),
-                      const SizedBox(width: 6),
-                      const Text('Confirm ✓', style: TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-                    ]),
-                  ),
-                )),
-              ]),
-            ]),
-          ),
-        ),
-      ),
+      builder: (_) => PeoplePicker(people: people, initial: preselected),
     );
-    editController.dispose();
+    _pickerOpen = false;
+    if (ids != null) {
+      await ref.read(chatProvider.notifier).confirmSelectedPeople(ids);
+      _scrollToBottom();
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final messages  = ref.watch(chatProvider);
-    final isTyping  = ref.watch(isTypingProvider);
-    final step      = ref.watch(flowStepProvider);
-    final result    = ref.watch(splitResultProvider);
-    final bill      = ref.watch(finalBillProvider);
-    final currency  = ref.watch(currencyProvider);
-    final locale    = ref.watch(voiceLocaleProvider);
-    final themeMode = ref.watch(themeProvider);
-    final language  = ref.watch(languageProvider);
-    final isDark    = Theme.of(context).brightness == Brightness.dark;
-
-    ref.listen(chatProvider,    (_, __) => _scrollToBottom());
-    ref.listen(isTypingProvider,(_, __) => _scrollToBottom());
-    ref.listen(flowStepProvider, (prev, next) {
-      if (next == FlowStep.itemWho) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          final people = ref.read(billDraftProvider).people;
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            isDismissible: false,
-            enableDrag: false,
-            backgroundColor: Colors.transparent,
-            builder: (_) => _NameSelectorModal(
-              people: people,
-              isDark: isDark,
-              onConfirm: (ids) {
-                Navigator.pop(context);
-                ref.read(chatProvider.notifier).confirmSelectedPeople(ids);
-              },
-            ),
-          );
-        });
-      }
-    });
-
-    final showScan = step == FlowStep.itemName || step == FlowStep.itemPrice || step == FlowStep.itemWho || step == FlowStep.itemCount;
-
-    return Scaffold(
-
-      body: Stack(children: [
-        SafeArea(child: Column(children: [
-        _TopBar(
-          step: step,
-          currency: currency,
-          locale: locale,
-          isDark: isDark,
-          language: language,
-          themeMode: themeMode,
-        ),
-        Expanded(
-          child: ListView.builder(
-            controller: _scroll,
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 6),
-            itemCount: messages.length + (isTyping ? 1 : 0) + (result != null ? 1 : 0),
-            itemBuilder: (ctx, i) {
-              if (result != null && bill != null && i == messages.length + (isTyping ? 1 : 0)) {
-                return ResultCard(result: result, bill: bill).animate().fadeIn().slideY(begin: .1);
-              }
-              if (isTyping && i == messages.length) {
-                return const _TypingBubble().animate().fadeIn();
-              }
-              return _Bubble(msg: messages[i])
-                  .animate().fadeIn(duration: 220.ms).slideY(begin: .07, duration: 220.ms);
-            },
-          ),
-        ),
-
-        _InputBar(
-          ctrl: _ctrl, isRec: _isRec, liveText: _live,
-          showScan: showScan,
-          onSend: _send, onVoice: _toggleVoice, onScan: _pickImage,
-          onRestart: () {},
-        ),
-      ])),
-        // Hide restart button when keyboard is open
-        if (MediaQuery.of(context).viewInsets.bottom == 0)
-          _DraggableRestartButton(
-            isDark: isDark,
-            onRestart: () => ref.read(chatProvider.notifier).reset(),
-            accent: isDark ? AppTheme.darkAccent : AppTheme.lightAccent,
-          ),
-      ]),
-    );
-  }
-}
-
-// ── TOP BAR ───────────────────────────────────────────────────────────────────
-
-class _TopBar extends ConsumerWidget {
-  final FlowStep step;
-  final String currency;
-  final VoiceLocale locale;
-  final bool isDark;
-  final String language;
-  final ThemeMode themeMode;
-
-  const _TopBar({
-    required this.step, required this.currency, required this.locale,
-    required this.isDark, required this.language, required this.themeMode,
-  });
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final accentColor  = isDark ? AppTheme.darkAccent  : AppTheme.lightAccent;
-
-    return Container(
-      color: surfaceColor,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(children: [
-        // Language toggle - LEFT side
-        GestureDetector(
-          onTap: () {
-            ref.read(languageProvider.notifier).toggle();
-            final newLang = language == 'en' ? 'ar' : 'en';
-            ref.read(voiceLocaleProvider.notifier).value =
-                newLang == 'ar' ? VoiceLocale.arabic : VoiceLocale.english;
-            ref.read(chatProvider.notifier).reset();
-          },
-          child: Container(
-            height: 28,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: isDark ? Colors.white12 : Colors.black12,
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: language == 'en' ? accentColor : Colors.transparent,
-                ),
-                child: Text('EN', style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w700,
-                  color: language == 'en' ? Colors.white : (isDark ? Colors.white54 : Colors.black45),
-                )),
-              ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: language == 'ar' ? accentColor : Colors.transparent,
-                ),
-                child: Text('AR', style: TextStyle(
-                  fontSize: 11, fontWeight: FontWeight.w700,
-                  color: language == 'ar' ? Colors.white : (isDark ? Colors.white54 : Colors.black45),
-                )),
-              ),
-            ]),
-          ),
-        ),
-        // Logo + SplitCheck - CENTER
-        const Spacer(),
-        Container(
-          width: 28, height: 28,
-          decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(Icons.receipt_long, color: accentColor, size: 15),
-        ),
-        const Gap(6),
-        Text('SplitCheck', style: TextStyle(
-          fontSize: 15, fontWeight: FontWeight.w800, color: accentColor)),
-        const Spacer(),
-        // Theme toggle - RIGHT side
-        GestureDetector(
-          onTap: () => ref.read(themeProvider.notifier).toggle(context),
-          child: Container(
-            height: 28,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: isDark ? Colors.white12 : Colors.black12,
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: !isDark ? accentColor : Colors.transparent,
-                ),
-                child: Icon(Icons.wb_sunny, size: 14, color: Colors.white),
-              ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  color: isDark ? accentColor : Colors.transparent,
-                ),
-                child: Icon(Icons.nightlight_round, size: 14, color: Colors.white),
-              ),
-            ]),
-          ),
-        ),
-      ]),
-    );
-  }
-
-}
-
-// ── BUBBLE ────────────────────────────────────────────────────────────────────
-
-class _Bubble extends StatefulWidget {
-  final ChatMessage msg;
-  const _Bubble({required this.msg});
-  @override State<_Bubble> createState() => _BubbleState();
-}
-
-class _BubbleState extends State<_Bubble> {
-  @override
-  Widget build(BuildContext context) {
-    final isBot  = widget.msg.role == MessageRole.bot;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final botBg  = isDark ? AppTheme.darkCard  : AppTheme.lightCard;
-    final botBorder = isDark
-        ? AppTheme.darkAccent.withValues(alpha: 0.13)
-        : AppTheme.lightAccent.withValues(alpha: 0.2);
-    final userBg = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
-    final textColor = isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final accentColor = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: isBot ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-        children: [
-          ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.86),
-            child: Column(
-              crossAxisAlignment: isBot ? CrossAxisAlignment.start : CrossAxisAlignment.end,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isBot ? botBg : userBg,
-                    border: isBot ? Border.all(color: botBorder) : null,
-                    borderRadius: BorderRadius.only(
-                      topLeft:     const Radius.circular(18),
-                      topRight:    const Radius.circular(18),
-                      bottomLeft:  Radius.circular(isBot ? 5 : 18),
-                      bottomRight: Radius.circular(isBot ? 18 : 5),
-                    ),
-                  ),
-                  child: Text(widget.msg.text,
-                    style: TextStyle(fontSize: 13, height: 1.65,
-                      color: isBot ? textColor : Colors.white)),
-                ),
-                if (widget.msg.inlineWidget != null)
-                  Padding(padding: const EdgeInsets.only(top: 6),
-                    child: widget.msg.inlineWidget!),
-                if (widget.msg.chips?.isNotEmpty == true)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Wrap(spacing: 6, runSpacing: 6,
-                      children: widget.msg.chips!.map((chip) {
-                        return GestureDetector(
-                          onTap: chip.used ? null : () {
-                            setState(() => chip.used = true);
-                            chip.onTap();
-                          },
-                          child: AnimatedOpacity(
-                            opacity: chip.used ? 0.35 : 1,
-                            duration: 200.ms,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 13, vertical: 7),
-                              decoration: BoxDecoration(
-                                color: accentColor.withValues(alpha: 0.1),
-                                border: Border.all(
-                                  color: accentColor.withValues(alpha: 0.3)),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(chip.label, style: TextStyle(
-                                fontSize: 12, fontWeight: FontWeight.w600,
-                                color: accentColor)),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 3, left: 3, right: 3),
-                  child: Text(
-                    '${widget.msg.time.hour.toString().padLeft(2,'0')}:'
-                    '${widget.msg.time.minute.toString().padLeft(2,'0')}',
-                    style: TextStyle(fontSize: 10,
-                      color: (isDark ? Colors.white : Colors.black)
-                          .withValues(alpha: 0.2)),
-                    textAlign: isBot ? TextAlign.left : TextAlign.right,
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Future<void> _confirmRestart() async {
+    final s = ref.read(stringsProvider);
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (ctx) => CupertinoAlertDialog(
+        title: Text(s.startOver),
+        content: Text(s.startOverConfirm),
+        actions: [
+          CupertinoDialogAction(onPressed: () => Navigator.pop(ctx, false), child: Text(s.cancel)),
+          CupertinoDialogAction(isDestructiveAction: true,
+              onPressed: () => Navigator.pop(ctx, true), child: Text(s.startOver)),
         ],
       ),
     );
-  }
-}
-
-// ── TYPING ────────────────────────────────────────────────────────────────────
-
-class _TypingBubble extends StatefulWidget {
-  const _TypingBubble();
-  @override State<_TypingBubble> createState() => _TypingBubbleState();
-}
-
-class _TypingBubbleState extends State<_TypingBubble>
-    with TickerProviderStateMixin {
-  late final List<AnimationController> _cs;
-
-  @override
-  void initState() {
-    super.initState();
-    _cs = List.generate(3, (i) => AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 700))..repeat(reverse: true));
-    for (int i = 0; i < 3; i++) {
-      Future.delayed(Duration(milliseconds: i * 140), () {
-        if (mounted) _cs[i].forward();
-      });
+    if (ok == true) {
+      HapticFeedback.mediumImpact();
+      await ref.read(chatProvider.notifier).reset();
     }
   }
 
   @override
-  void dispose() { for (final c in _cs) c.dispose(); super.dispose(); }
+  Widget build(BuildContext context) {
+    final messages = ref.watch(chatProvider);
+    final isTyping = ref.watch(isTypingProvider);
+    final step     = ref.watch(flowStepProvider);
+    final result   = ref.watch(splitResultProvider);
+    final bill     = ref.watch(finalBillProvider);
+    final s        = ref.watch(stringsProvider);
+    final p        = Palette.of(context);
+
+    ref.listen(chatProvider,     (_, __) => _scrollToBottom());
+    ref.listen(isTypingProvider, (_, __) => _scrollToBottom());
+    ref.listen(splitResultProvider, (_, __) => _scrollToBottom());
+    ref.listen(flowStepProvider, (prev, next) {
+      if (next == FlowStep.itemWho) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _openPeoplePicker());
+      }
+    });
+
+    final showScan = step == FlowStep.itemCount || step == FlowStep.itemName ||
+        step == FlowStep.itemPrice;
+    final topInset = MediaQuery.of(context).padding.top;
+    const navHeight = 52.0;
+
+    final count = messages.length + (isTyping ? 1 : 0) + (result != null && bill != null ? 1 : 0);
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: p.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: p.bg,
+        body: Column(children: [
+          Expanded(
+            child: Stack(children: [
+              // Messages scroll underneath the translucent nav bar.
+              ListView.builder(
+                controller: _scroll,
+                padding: EdgeInsets.fromLTRB(12, topInset + navHeight + 12, 12, 12),
+                itemCount: count,
+                itemBuilder: (ctx, i) {
+                  if (i >= messages.length) {
+                    if (isTyping && i == messages.length) {
+                      return const _TypingBubble(key: ValueKey('typing'));
+                    }
+                    return ResultCard(result: result!, bill: bill!)
+                        .animate().fadeIn(duration: 350.ms).slideY(begin: .06, curve: Curves.easeOutCubic);
+                  }
+                  final msg  = messages[i];
+                  final prev = i > 0 ? messages[i - 1] : null;
+                  return _Bubble(
+                    key: ValueKey(msg.id),
+                    msg: msg,
+                    grouped: prev?.role == msg.role,
+                    onChip: (chip) {
+                      HapticFeedback.selectionClick();
+                      ref.read(chatProvider.notifier).chipTapped(msg, chip);
+                    },
+                  );
+                },
+              ),
+              Positioned(
+                top: 0, left: 0, right: 0,
+                child: _NavBar(
+                  height: navHeight,
+                  progress: _progressFor(step),
+                  title: s.appName,
+                  onRestart: _confirmRestart,
+                  onSettings: () => showSettingsSheet(context),
+                ),
+              ),
+            ]),
+          ),
+          _InputBar(
+            ctrl: _ctrl, focus: _focus, isRec: _isRec, liveText: _live,
+            showScan: showScan, s: s,
+            onSend: _send, onVoice: _toggleVoice, onScan: _pickImage,
+          ),
+        ]),
+      ),
+    );
+  }
+
+  static double _progressFor(FlowStep step) => switch (step) {
+    FlowStep.peopleCount => 0.05,
+    FlowStep.people      => 0.14,
+    FlowStep.itemCount   => 0.25,
+    FlowStep.itemName || FlowStep.itemPrice || FlowStep.itemWho => 0.40,
+    FlowStep.itemSummary || FlowStep.itemEdit => 0.55,
+    FlowStep.vat         => 0.65,
+    FlowStep.service     => 0.73,
+    FlowStep.tip         => 0.81,
+    FlowStep.discount    => 0.88,
+    FlowStep.confirm || FlowStep.editMenu => 0.95,
+    FlowStep.result      => 1.0,
+  };
+}
+
+// ── NAV BAR ───────────────────────────────────────────────────────────────────
+
+class _NavBar extends StatelessWidget {
+  final double height, progress;
+  final String title;
+  final VoidCallback onRestart, onSettings;
+  const _NavBar({required this.height, required this.progress, required this.title,
+      required this.onRestart, required this.onSettings});
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isDark ? AppTheme.darkCard : AppTheme.lightCard;
-    final accent = isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
-
-    return Padding(padding: const EdgeInsets.only(bottom: 10), child: Row(children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-        decoration: BoxDecoration(
-          color: bg,
-          border: Border.all(color: accent.withValues(alpha: 0.15)),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(18), topRight: Radius.circular(18),
-            bottomLeft: Radius.circular(5), bottomRight: Radius.circular(18)),
-        ),
-        child: Row(children: List.generate(3, (i) => AnimatedBuilder(
-          animation: _cs[i],
-          builder: (_, __) => Container(
-            width: 6, height: 6,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.5 + _cs[i].value * 0.5),
-              shape: BoxShape.circle,
-            ),
-            transform: Matrix4.translationValues(0, -_cs[i].value * 5, 0),
+    final p = Palette.of(context);
+    final top = MediaQuery.of(context).padding.top;
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          height: top + height,
+          padding: EdgeInsets.only(top: top),
+          decoration: BoxDecoration(
+            color: p.barBg,
+            border: Border(bottom: BorderSide(color: p.separator, width: 0.33)),
           ),
-        ))),
+          child: Stack(children: [
+            Row(children: [
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                onPressed: onRestart,
+                child: Icon(CupertinoIcons.arrow_counterclockwise, color: p.accent, size: 22),
+              ),
+              Expanded(
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const AppGlyph(size: 26),
+                  const SizedBox(width: 8),
+                  Text(title, style: TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.4, color: p.label)),
+                ]),
+              ),
+              CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                onPressed: onSettings,
+                child: Icon(CupertinoIcons.ellipsis_circle, color: p.accent, size: 24),
+              ),
+            ]),
+            // Thin progress line along the bottom edge, like Safari's loader.
+            Positioned(
+              left: 0, right: 0, bottom: 0,
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: AnimatedFractionallySizedBox(
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeOutCubic,
+                  widthFactor: progress,
+                  child: Container(height: 2, color: p.accent),
+                ),
+              ),
+            ),
+          ]),
+        ),
       ),
-    ]));
+    );
+  }
+}
+
+// ── MESSAGE BUBBLE ────────────────────────────────────────────────────────────
+
+class _Bubble extends StatelessWidget {
+  final ChatMessage msg;
+  final bool grouped;
+  final void Function(QuickChip chip) onChip;
+  const _Bubble({super.key, required this.msg, required this.grouped, required this.onChip});
+
+  @override
+  Widget build(BuildContext context) {
+    final p     = Palette.of(context);
+    final isBot = msg.role == MessageRole.bot;
+    final maxW  = MediaQuery.of(context).size.width * 0.78;
+    const r = Radius.circular(20);
+    const tail = Radius.circular(6);
+
+    final bubble = Container(
+      constraints: BoxConstraints(maxWidth: maxW),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: isBot ? p.botBubble : p.userBubble,
+        borderRadius: BorderRadiusDirectional.only(
+          topStart: r, topEnd: r,
+          bottomStart: isBot ? tail : r,
+          bottomEnd:   isBot ? r : tail,
+        ),
+      ),
+      child: Text(msg.text, style: TextStyle(
+        fontSize: 16, height: 1.32, letterSpacing: -0.2,
+        color: isBot ? p.label : Colors.white,
+      )),
+    );
+
+    final chips = msg.chips ?? const <QuickChip>[];
+
+    return Padding(
+      padding: EdgeInsets.only(top: grouped ? 3 : 12),
+      child: Column(
+        crossAxisAlignment: isBot ? CrossAxisAlignment.start : CrossAxisAlignment.end,
+        children: [
+          bubble,
+          if (chips.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8, runSpacing: 8,
+                children: [for (final c in chips) _ChipButton(chip: c, onTap: () => onChip(c))],
+              ),
+            ),
+        ],
+      ),
+    ).animate().fadeIn(duration: 220.ms).moveY(begin: 8, end: 0, duration: 260.ms, curve: Curves.easeOutCubic);
+  }
+}
+
+class _ChipButton extends StatelessWidget {
+  final QuickChip chip;
+  final VoidCallback onTap;
+  const _ChipButton({required this.chip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: chip.used ? 0.38 : 1,
+      child: PressableScale(
+        onTap: chip.used ? null : onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
+          decoration: BoxDecoration(
+            color: p.accent.withValues(alpha: p.isDark ? 0.22 : 0.12),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Text(chip.label, style: TextStyle(
+            fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: -0.2, color: p.accent)),
+        ),
+      ),
+    );
+  }
+}
+
+// ── TYPING INDICATOR ──────────────────────────────────────────────────────────
+
+class _TypingBubble extends StatefulWidget {
+  const _TypingBubble({super.key});
+  @override State<_TypingBubble> createState() => _TypingBubbleState();
+}
+
+class _TypingBubbleState extends State<_TypingBubble> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..repeat();
+
+  @override
+  void dispose() { _c.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          decoration: BoxDecoration(color: p.botBubble, borderRadius: BorderRadius.circular(20)),
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: List.generate(3, (i) {
+              final t = ((_c.value - i * 0.18) % 1.0);
+              final a = 0.3 + 0.7 * (t < 0.5 ? t * 2 : (1 - t) * 2);
+              return Container(
+                width: 8, height: 8,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  color: p.secondary.withValues(alpha: a), shape: BoxShape.circle),
+              );
+            })),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -620,401 +501,221 @@ class _TypingBubbleState extends State<_TypingBubble>
 
 class _InputBar extends StatelessWidget {
   final TextEditingController ctrl;
+  final FocusNode focus;
   final bool isRec, showScan;
   final String liveText;
-  final VoidCallback onSend, onVoice, onScan, onRestart;
+  final S s;
+  final VoidCallback onSend, onVoice, onScan;
 
   const _InputBar({
-    required this.ctrl, required this.isRec, required this.liveText,
-    required this.showScan, required this.onSend,
-    required this.onVoice, required this.onScan, required this.onRestart,
+    required this.ctrl, required this.focus, required this.isRec, required this.liveText,
+    required this.showScan, required this.s,
+    required this.onSend, required this.onVoice, required this.onScan,
   });
 
   @override
   Widget build(BuildContext context) {
-    final isDark      = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final cardColor    = isDark ? AppTheme.darkCard    : AppTheme.lightCard;
-    final accentColor  = isDark ? AppTheme.darkAccent  : AppTheme.lightAccent;
-    final accentDark   = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
-    final hintColor    = isDark ? AppTheme.darkTextHint    : AppTheme.lightTextHint;
-    final borderColor  = isDark
-        ? Colors.white.withValues(alpha: 0.1)
-        : Colors.black.withValues(alpha: 0.1);
+    final p = Palette.of(context);
+    final bottom = MediaQuery.of(context).padding.bottom;
 
-    final textColor    = isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary;
-    final mutedColor   = isDark ? AppTheme.darkTextMuted   : AppTheme.lightTextMuted;
-    return Container(
-      color: surfaceColor,
-      padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        if (isRec && liveText.isNotEmpty)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: accentColor.withValues(alpha: 0.2)),
-            ),
-            child: Text(liveText,
-              style: TextStyle(fontSize: 12, color: mutedColor)),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + bottom),
+          decoration: BoxDecoration(
+            color: p.barBg,
+            border: Border(top: BorderSide(color: p.separator, width: 0.33)),
           ),
-        Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          if (showScan) ...[
-            _IBtn(
-              onTap: onScan, icon: Icons.camera_alt_outlined,
-              color: accentColor,
-              bg: accentColor.withValues(alpha: 0.1),
-              border: accentColor.withValues(alpha: 0.22),
-            ),
-            const Gap(7),
-          ],
-          Expanded(
-            child: TextField(
-              controller: ctrl,
-              maxLines: 4, minLines: 1,
-              onSubmitted: (_) => onSend(),
-              style: TextStyle(fontSize: 13, color: textColor),
-              decoration: InputDecoration(
-                hintText: isRec ? 'Listening…' : 'Type your answer…',
-                hintStyle: TextStyle(fontSize: 13, color: hintColor),
-                filled: true,
-                fillColor: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.04),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide(color: borderColor)),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide(color: borderColor)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(22),
-                  borderSide: BorderSide(
-                    color: accentColor, width: 1.5)),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 10),
-                isDense: true,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (isRec)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
+                child: Row(children: [
+                  Icon(CupertinoIcons.waveform, color: p.red, size: 18)
+                      .animate(onPlay: (c) => c.repeat(reverse: true)).fade(begin: .4, end: 1, duration: 600.ms),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(liveText.isEmpty ? s.listening : liveText,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 15, color: p.secondary))),
+                ]),
               ),
-            ),
-          ),
-          const Gap(7),
-          _IBtn(
-            onTap: onVoice,
-            icon: isRec ? Icons.stop : Icons.mic,
-            color: isRec ? Colors.white : mutedColor,
-            bg: isRec
-                ? const Color(0xFFB91C1C)
-                : (isDark
-                    ? Colors.white.withValues(alpha: 0.07)
-                    : Colors.black.withValues(alpha: 0.06)),
-            border: isRec
-                ? const Color(0xFFB91C1C)
-                : borderColor,
-          ),
-          const Gap(7),
-          _IBtn(
-            onTap: onSend, icon: Icons.send_rounded,
-            color: Colors.white, bg: accentDark, border: accentDark,
-          ),
-        ]),
-      ]),
-    );
-  }
-}
-
-class _IBtn extends StatelessWidget {
-  final VoidCallback onTap;
-  final IconData icon;
-  final Color color, bg, border;
-
-  const _IBtn({
-    required this.onTap, required this.icon,
-    required this.color, required this.bg, required this.border,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 40, height: 40,
-        decoration: BoxDecoration(
-          color: bg, shape: BoxShape.circle,
-          border: Border.all(color: border),
-        ),
-        child: Icon(icon, color: color, size: 17),
-      ),
-    );
-  }
-}
-
-// ── NAME SELECTOR ─────────────────────────────────────────────────────────────
-class _NameSelector extends StatefulWidget {
-  final List<Person> people;
-  final bool isDark;
-  final void Function(List<String> ids) onConfirm;
-  const _NameSelector({required this.people, required this.isDark, required this.onConfirm});
-  @override State<_NameSelector> createState() => _NameSelectorState();
-}
-
-class _NameSelectorState extends State<_NameSelector> {
-  final Set<String> _selected = {};
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = widget.isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
-    final bg = widget.isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final border = widget.isDark ? Colors.white12 : Colors.black12;
-
-    return Container(
-      color: bg,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            ...widget.people.map((p) {
-              final pid = p.id;
-              final selected = _selected.contains(pid);
-              return GestureDetector(
-                onTap: () => setState(() {
-                  if (selected) _selected.remove(pid);
-                  else _selected.add(pid);
-                }),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                child: showScan
+                    ? Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 6),
+                        child: CircleIconButton(icon: CupertinoIcons.camera_fill, onTap: onScan),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              Expanded(
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 36),
                   decoration: BoxDecoration(
-                    color: selected ? accent : Colors.transparent,
-                    border: Border.all(color: selected ? accent : border),
-                    borderRadius: BorderRadius.circular(20),
+                    color: p.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: p.separator, width: 0.8),
                   ),
-                  child: Text(p.name, style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : (widget.isDark ? Colors.white70 : Colors.black54),
-                  )),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Expanded(
+                      child: CupertinoTextField(
+                        controller: ctrl,
+                        focusNode: focus,
+                        minLines: 1, maxLines: 4,
+                        placeholder: isRec ? s.listening : s.typeHint,
+                        placeholderStyle: TextStyle(fontSize: 16, color: p.tertiary),
+                        style: TextStyle(fontSize: 16, color: p.label),
+                        padding: const EdgeInsetsDirectional.fromSTEB(14, 8, 6, 8),
+                        decoration: null,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => onSend(),
+                      ),
+                    ),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: ctrl,
+                      builder: (_, v, __) {
+                        final hasText = v.text.trim().isNotEmpty;
+                        return Padding(
+                          padding: const EdgeInsets.all(3),
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                            child: hasText
+                                ? PressableScale(
+                                    key: const ValueKey('send'),
+                                    onTap: onSend,
+                                    child: Icon(CupertinoIcons.arrow_up_circle_fill, size: 30, color: p.accent),
+                                  )
+                                : PressableScale(
+                                    key: const ValueKey('mic'),
+                                    onTap: onVoice,
+                                    child: Container(
+                                      width: 30, height: 30,
+                                      decoration: BoxDecoration(
+                                        color: isRec ? p.red : Colors.transparent, shape: BoxShape.circle),
+                                      child: Icon(isRec ? CupertinoIcons.stop_fill : CupertinoIcons.mic_fill,
+                                          size: isRec ? 14 : 20, color: isRec ? Colors.white : p.secondary),
+                                    ),
+                                  ),
+                          ),
+                        );
+                      },
+                    ),
+                  ]),
                 ),
-              );
-            }),
-            GestureDetector(
-              onTap: () => setState(() {
-                final allIds = widget.people.map((p) => p.id).toList();
-                if (_selected.length == widget.people.length) {
-                  _selected.clear();
-                } else {
-                  _selected.addAll(allIds);
-                }
-              }),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: _selected.length == widget.people.length ? Colors.green : Colors.transparent,
-                  border: Border.all(color: _selected.length == widget.people.length ? Colors.green : border),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text('Everyone', style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600,
-                  color: _selected.length == widget.people.length ? Colors.white : (widget.isDark ? Colors.white70 : Colors.black54),
-                )),
               ),
-            ),
+            ]),
           ]),
         ),
-        if (_selected.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: SizedBox(
-              width: double.infinity,
-              child: GestureDetector(
-                onTap: () => widget.onConfirm(_selected.toList()),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text('Confirm ✓',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-                ),
-              ),
-            ),
-          ),
-      ]),
-    );
-  }
-}
-
-// ── DRAGGABLE RESTART BUTTON ──────────────────────────────────────────────────
-class _DraggableRestartButton extends StatefulWidget {
-  final bool isDark;
-  final VoidCallback onRestart;
-  final Color accent;
-  const _DraggableRestartButton({required this.isDark, required this.onRestart, required this.accent});
-  @override State<_DraggableRestartButton> createState() => _DraggableRestartButtonState();
-}
-
-class _DraggableRestartButtonState extends State<_DraggableRestartButton> {
-  double _x = -1;
-  double _y = -1;
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    if (_x < 0) _x = size.width - 60;
-    if (_y < 0) _y = size.height * 0.5;
-
-    return Positioned(
-      left: _x,
-      top: _y,
-      child: Draggable(
-        feedback: _buildButton(),
-        childWhenDragging: const SizedBox.shrink(),
-        onDragEnd: (details) {
-          setState(() {
-            _x = details.offset.dx.clamp(0, size.width - 50);
-            _y = details.offset.dy.clamp(0, size.height - 50);
-          });
-        },
-        child: _buildButton(),
-      ),
-    );
-  }
-
-  Widget _buildButton() {
-    return GestureDetector(
-      onTap: widget.onRestart,
-      child: Container(
-        width: 44, height: 44,
-        decoration: BoxDecoration(
-          color: widget.accent,
-          shape: BoxShape.circle,
-          boxShadow: [BoxShadow(
-            color: widget.accent.withValues(alpha: 0.4),
-            blurRadius: 8, spreadRadius: 1,
-          )],
-        ),
-        child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
       ),
     );
   }
 }
 
-// ── NAME SELECTOR MODAL ───────────────────────────────────────────────────────
-class _NameSelectorModal extends StatefulWidget {
+// ── PEOPLE PICKER (sheet body) ────────────────────────────────────────────────
+
+class PeoplePicker extends ConsumerStatefulWidget {
   final List<Person> people;
-  final bool isDark;
-  final void Function(List<String> ids) onConfirm;
-  const _NameSelectorModal({required this.people, required this.isDark, required this.onConfirm});
-  @override State<_NameSelectorModal> createState() => _NameSelectorModalState();
+  final List<String> initial;
+  const PeoplePicker({super.key, required this.people, this.initial = const []});
+  @override ConsumerState<PeoplePicker> createState() => _PeoplePickerState();
 }
 
-class _NameSelectorModalState extends State<_NameSelectorModal> {
-  final Set<String> _selected = {};
+class _PeoplePickerState extends ConsumerState<PeoplePicker> {
+  late final Set<String> _sel = {...widget.initial};
+
+  bool get _all => _sel.length == widget.people.length;
+
+  void _toggle(String id) {
+    HapticFeedback.selectionClick();
+    setState(() => _sel.contains(id) ? _sel.remove(id) : _sel.add(id));
+  }
 
   @override
   Widget build(BuildContext context) {
-    final accent = widget.isDark ? AppTheme.darkAccent : AppTheme.lightAccent;
-    final bg = widget.isDark ? AppTheme.darkSurface : AppTheme.lightSurface;
-    final border = widget.isDark ? Colors.white12 : Colors.black12;
-    final allSelected = _selected.length == widget.people.length;
+    final p = Palette.of(context);
+    final s = ref.watch(stringsProvider);
+    final maxH = MediaQuery.of(context).size.height * 0.5;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        // Handle bar
-        Container(
-          width: 40, height: 4,
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: widget.isDark ? Colors.white24 : Colors.black12,
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-        Text('Select people', style: TextStyle(
-          fontSize: 16, fontWeight: FontWeight.w700,
-          color: widget.isDark ? Colors.white : Colors.black87)),
-        const SizedBox(height: 16),
-        // Grid
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 3.2,
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxH),
+        child: InsetGroup(
+          scrollable: true,
+          inSheet: true,
           children: [
-            ...widget.people.map((p) {
-              final selected = _selected.contains(p.id);
-              return GestureDetector(
-                onTap: () => setState(() {
-                  if (selected) _selected.remove(p.id);
-                  else _selected.add(p.id);
-                }),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  decoration: BoxDecoration(
-                    color: selected ? accent : Colors.transparent,
-                    border: Border.all(color: selected ? accent : border),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(child: Text(p.name, style: TextStyle(
-                    fontSize: 13, fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : (widget.isDark ? Colors.white70 : Colors.black54),
-                  ))),
-                ),
-              );
-            }),
-            // Everyone
-            GestureDetector(
-              onTap: () => setState(() {
-                if (allSelected) _selected.clear();
-                else _selected.addAll(widget.people.map((p) => p.id));
-              }),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                decoration: BoxDecoration(
-                  color: allSelected ? Colors.green : Colors.transparent,
-                  border: Border.all(color: Colors.green.withValues(alpha: allSelected ? 1 : 0.4)),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(child: Text('🌐 Everyone', style: TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600,
-                  color: allSelected ? Colors.white : Colors.green,
-                ))),
+            _PickRow(
+              leading: Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(color: p.green, shape: BoxShape.circle),
+                child: const Icon(CupertinoIcons.person_3_fill, color: Colors.white, size: 20),
               ),
+              title: s.everyone,
+              selected: _all,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _all ? _sel.clear() : _sel.addAll(widget.people.map((e) => e.id)));
+              },
             ),
+            for (final person in widget.people)
+              _PickRow(
+                leading: Avatar(person: person, size: 34),
+                title: person.name,
+                selected: _sel.contains(person.id),
+                onTap: () => _toggle(person.id),
+              ),
           ],
         ),
-        const SizedBox(height: 12),
-        if (_selected.isNotEmpty)
-          SizedBox(
-            width: double.infinity,
-            child: GestureDetector(
-              onTap: () => widget.onConfirm(_selected.toList()),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text('Confirm ✓',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15)),
-              ),
+      ),
+      const SizedBox(height: 16),
+      AppleButton(
+        label: s.confirm,
+        onTap: _sel.isEmpty ? null : () {
+          HapticFeedback.lightImpact();
+          // Keep the original order of people.
+          Navigator.pop(context, [for (final pp in widget.people) if (_sel.contains(pp.id)) pp.id]);
+        },
+      ),
+    ]);
+  }
+}
+
+class _PickRow extends StatelessWidget {
+  final Widget leading;
+  final String title;
+  final bool selected;
+  final VoidCallback onTap;
+  const _PickRow({required this.leading, required this.title, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        child: Row(children: [
+          leading,
+          const SizedBox(width: 12),
+          Expanded(child: Text(title, style: TextStyle(fontSize: 17, letterSpacing: -0.4, color: p.label))),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 150),
+            transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+            child: Icon(
+              selected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+              key: ValueKey(selected),
+              color: selected ? p.accent : p.tertiary,
+              size: 26,
             ),
           ),
-      ]),
+        ]),
+      ),
     );
   }
 }
+
+/// Keeps the voice locale in step with the app language.
+VoiceLocale voiceLocaleFor(String lang) => lang == 'ar' ? VoiceLocale.arabic : VoiceLocale.english;

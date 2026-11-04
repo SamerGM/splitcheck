@@ -1,3 +1,4 @@
+export 'settings_provider.dart' show currencyProvider;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'voice_service.dart';
 import 'ocr_service.dart';
@@ -8,19 +9,11 @@ final voiceServiceProvider   = Provider<VoiceService>((ref) => VoiceService());
 final ocrServiceProvider     = Provider<OcrService>((ref) => OcrService());
 final historyServiceProvider = Provider<HistoryService>((ref) => HistoryService());
 
-final currencyProvider      = NotifierProvider<_StrNotifier, String>(() => _StrNotifier('AED'));
 final voiceLocaleProvider   = NotifierProvider<_LocaleNotifier, VoiceLocale>(() => _LocaleNotifier());
 final flowStepProvider      = NotifierProvider<_StepNotifier, FlowStep>(() => _StepNotifier());
 final isTypingProvider      = NotifierProvider<_BoolNotifier, bool>(() => _BoolNotifier());
 final splitResultProvider   = NotifierProvider<_ResultNotifier, SplitResult?>(() => _ResultNotifier());
 final finalBillProvider     = NotifierProvider<_BillNotifier, Bill?>(() => _BillNotifier());
-
-class _StrNotifier extends Notifier<String> {
-  final String _init;
-  _StrNotifier(this._init);
-  @override String build() => _init;
-  set value(String v) => state = v;
-}
 
 class _LocaleNotifier extends Notifier<VoiceLocale> {
   @override VoiceLocale build() => VoiceLocale.english;
@@ -28,7 +21,7 @@ class _LocaleNotifier extends Notifier<VoiceLocale> {
 }
 
 class _StepNotifier extends Notifier<FlowStep> {
-  @override FlowStep build() => FlowStep.people;
+  @override FlowStep build() => FlowStep.peopleCount;
   set value(FlowStep v) => state = v;
 }
 
@@ -58,19 +51,9 @@ class BillDraftNotifier extends Notifier<BillDraft> {
     state = state.copyWith(items: updated);
   }
   void clearItems() => state = state.copyWith(items: []);
+  void setItems(List<BillItem> v) => state = state.copyWith(items: v);
   void setExtras(BillExtras v) => state = state.copyWith(extras: v);
   void reset() => state = BillDraft.empty();
-}
-
-// Item building state
-final currentItemNameProvider  = NotifierProvider<_StrNotifier, String>(() => _StrNotifier(''));
-final currentItemPriceProvider = NotifierProvider<_StrNotifier, String>(() => _StrNotifier(''));
-final totalItemCountProvider   = NotifierProvider<_IntNotifier, int>(() => _IntNotifier());
-final currentItemIndexProvider = NotifierProvider<_IntNotifier, int>(() => _IntNotifier());
-
-class _IntNotifier extends Notifier<int> {
-  @override int build() => 0;
-  set value(int v) => state = v;
 }
 
 final billDraftProvider = NotifierProvider<BillDraftNotifier, BillDraft>(
@@ -98,4 +81,4 @@ final historyProvider = AsyncNotifierProvider<HistoryNotifier, List<Bill>>(
   HistoryNotifier.new,
 );
 
-enum FlowStep { peopleCount, people, itemMethod, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, discount, confirm, result }
+enum FlowStep { peopleCount, people, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, discount, confirm, result }

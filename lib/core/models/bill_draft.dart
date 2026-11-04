@@ -49,6 +49,7 @@ class BillDraft {
 class PersonResult {
   final Person person;
   final double itemsSubtotal;  // their share of item costs only
+  final double discountShare;  // their share of the discount (positive number)
   final double vatShare;
   final double serviceShare;
   final double tipShare;
@@ -57,6 +58,7 @@ class PersonResult {
   const PersonResult({
     required this.person,
     required this.itemsSubtotal,
+    this.discountShare = 0,
     required this.vatShare,
     required this.serviceShare,
     required this.tipShare,
@@ -66,6 +68,7 @@ class PersonResult {
 
 class SplitResult {
   final double subtotal;
+  final double discountAmount;
   final double vatAmount;
   final double serviceAmount;
   final double tipAmount;
@@ -74,6 +77,7 @@ class SplitResult {
 
   const SplitResult({
     required this.subtotal,
+    this.discountAmount = 0,
     required this.vatAmount,
     required this.serviceAmount,
     required this.tipAmount,

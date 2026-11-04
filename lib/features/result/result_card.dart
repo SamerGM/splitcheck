@@ -1,5 +1,7 @@
+// lib/features/result/result_card.dart
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -8,351 +10,276 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/models.dart';
+import '../../core/services/settings_provider.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/strings.dart';
-import '../../core/services/settings_provider.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/apple_widgets.dart';
 import '../flow/flow_controller.dart';
 
-class ResultCard extends ConsumerWidget {
+class ResultCard extends ConsumerStatefulWidget {
   final SplitResult result;
   final Bill bill;
+  const ResultCard({super.key, required this.result, required this.bill});
+  @override ConsumerState<ResultCard> createState() => _ResultCardState();
+}
+
+class _ResultCardState extends ConsumerState<ResultCard> {
   final _shareKey = GlobalKey();
 
-  ResultCard({super.key, required this.result, required this.bill});
+  SplitResult get result => widget.result;
+  Bill get bill => widget.bill;
 
-  String _buildShareText(S s) {
-    final buf = StringBuffer();
-    buf.writeln(s.shareHeader(bill.merchant));
-    buf.writeln('*' * 24);
+  String _fmt(S s, double v) {
+    final str = fmtAmount(v, bill.currency, arabic: s.isAr);
+    return s.isAr ? toArabicDigits(str) : str;
+  }
+
+  List<BillItem> _itemsOf(Person person) => bill.items.where((it) {
+    final valid = it.personIds.where((id) => bill.people.any((p) => p.id == id)).toList();
+    return valid.isEmpty || valid.contains(person.id);
+  }).toList();
+
+  int _splitCount(BillItem it) {
+    final valid = it.personIds.where((id) => bill.people.any((p) => p.id == id)).length;
+    return valid == 0 ? bill.people.length : valid;
+  }
+
+  String _shareText(S s) {
+    final buf = StringBuffer()
+      ..writeln('🧾 ${s.billWord}')
+      ..writeln();
     for (final pr in result.personResults) {
-      buf.writeln('');
-      buf.writeln('*** ${pr.person.name} ***');
-      buf.writeln('${s.grandTotal}: ${fmtAmount(pr.total, bill.currency)}');
-      final myItems = bill.items.where((it) =>
-        it.personIds.isEmpty
-            ? bill.people.map((p) => p.id).contains(pr.person.id)
-            : it.personIds.contains(pr.person.id)).toList();
-      for (final it in myItems) {
-        final assigned = it.personIds.isEmpty ? bill.people.length : it.personIds.length;
-        buf.writeln('  • ${it.name}: ${fmtAmount(it.price / assigned, bill.currency)}');
+      buf.writeln('${pr.person.name}: ${_fmt(s, pr.total)}');
+      for (final it in _itemsOf(pr.person)) {
+        buf.writeln('   • ${it.name} ${_fmt(s, it.price / _splitCount(it))}');
       }
-      if (pr.vatShare > 0) buf.writeln('  • ${s.vatLabel}: ${fmtAmount(pr.vatShare, bill.currency)}');
-      if (pr.serviceShare > 0) buf.writeln('  • ${s.serviceLabel}: ${fmtAmount(pr.serviceShare, bill.currency)}');
-      if (pr.tipShare > 0) buf.writeln('  • ${s.tipLabel}: ${fmtAmount(pr.tipShare, bill.currency)}');
-      buf.writeln('*' * 24);
+      if (pr.discountShare > 0) buf.writeln('   • ${s.discountLabel} −${_fmt(s, pr.discountShare)}');
+      if (pr.vatShare > 0)      buf.writeln('   • ${s.vatLabel} ${_fmt(s, pr.vatShare)}');
+      if (pr.serviceShare > 0)  buf.writeln('   • ${s.serviceLabel} ${_fmt(s, pr.serviceShare)}');
+      if (pr.tipShare > 0)      buf.writeln('   • ${s.tipLabel} ${_fmt(s, pr.tipShare)}');
     }
-    buf.writeln('${s.grandTotal}: ${fmtAmount(result.grandTotal, bill.currency)}');
-    buf.writeln();
-    buf.writeln(s.shareFooter);
+    buf
+      ..writeln()
+      ..writeln('${s.grandTotal}: ${_fmt(s, result.grandTotal)}')
+      ..writeln(s.shareFooter);
     return buf.toString();
   }
 
-  Future<void> _shareAsImage(BuildContext context, S s) async {
+  Future<void> _share(S s) async {
+    HapticFeedback.lightImpact();
     try {
       final boundary = _shareKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return;
+      if (boundary == null) throw StateError('no boundary');
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) return;
-      final bytes = byteData.buffer.asUint8List();
-      final dir = await getTemporaryDirectory();
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (bytes == null) throw StateError('no bytes');
+      final dir  = await getTemporaryDirectory();
       final file = File('${dir.path}/splitcheck_result.png');
-      await file.writeAsBytes(bytes);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: s.shareFooter,
-        subject: '\${s.billWord} Split',
-      );
-    } catch (e) {
-      await Share.share(_buildShareText(s), subject: 'Bill Split');
+      await file.writeAsBytes(bytes.buffer.asUint8List());
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(file.path)], text: _shareText(s), subject: s.billWord));
+    } catch (_) {
+      await SharePlus.instance.share(ShareParams(text: _shareText(s), subject: s.billWord));
+    }
+  }
+
+  Future<void> _copy(S s) async {
+    HapticFeedback.lightImpact();
+    await Clipboard.setData(ClipboardData(text: _shareText(s)));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(CupertinoIcons.checkmark_alt_circle_fill, color: Colors.white, size: 20),
+          const SizedBox(width: 8), Text(s.copied),
+        ]),
+        duration: const Duration(seconds: 2),
+      ));
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark     = Theme.of(context).brightness == Brightness.dark;
-    final s          = ref.watch(stringsProvider);
-    final accent     = isDark ? AppTheme.darkAccent     : AppTheme.lightAccent;
-    final accentDark = isDark ? AppTheme.darkAccentDark : AppTheme.lightAccentDark;
-    final textHint   = isDark ? AppTheme.darkTextHint   : AppTheme.lightTextHint;
-    final textMuted  = isDark ? AppTheme.darkTextMuted  : AppTheme.lightTextMuted;
-    final bgColor    = isDark ? const Color(0xFF0A1628) : Colors.white;
-    final cardColor  = isDark ? const Color(0xFF0F1D30) : const Color(0xFFEEF4FB);
+  Widget build(BuildContext context) {
+    final s = ref.watch(stringsProvider);
+    final p = Palette.of(context);
 
-    return Column(
-      children: [
-        // ── COMPACT SHARE CARD (captured for image) ─────────────────────────
+    return Padding(
+      padding: const EdgeInsets.only(top: 14, bottom: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // ── Summary card (this is what gets shared as an image) ─────────────
         RepaintBoundary(
           key: _shareKey,
           child: Container(
-            color: bgColor,
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header - logo only, no toggles
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: cardColor,
-                    border: Border.all(color: accent.withValues(alpha: 0.2)),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        Icon(Icons.receipt_long, color: accent, size: 16),
-                        const SizedBox(width: 6),
-                        Text('SplitCheck', style: TextStyle(
-                          fontSize: 13, fontWeight: FontWeight.w800, color: accent)),
-                        const Spacer(),
-                        if (bill.merchant.isNotEmpty)
-                          Text(bill.merchant, style: TextStyle(fontSize: 11, color: textMuted)),
-                      ]),
-                      const SizedBox(height: 10),
-                      // Grand total
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.1),
-                          border: Border.all(color: accent.withValues(alpha: 0.22)),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(s.grandTotal, style: TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w700, color: accent)),
-                            FittedBox(fit: BoxFit.scaleDown,
-                              child: Text(fmtAmount(result.grandTotal, bill.currency),
-                                style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: accent))),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(s.perPerson, style: TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w700,
-                        color: textHint, letterSpacing: .7)),
-                      const SizedBox(height: 8),
-                      // Compact: name + total only
-                      ...result.personResults.map((pr) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(children: [
-                          CircleAvatar(
-                            radius: 13,
-                            backgroundColor: pr.person.color.withValues(alpha: 0.15),
-                            child: Text(pr.person.name.characters.first.toUpperCase(),
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                                color: pr.person.color)),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(pr.person.name, style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600,
-                            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
-                          const Spacer(),
-                          FittedBox(fit: BoxFit.scaleDown,
-                            child: Text(fmtAmount(pr.total, bill.currency),
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: accent))),
-                        ]),
-                      )),
-                      const SizedBox(height: 4),
-                      Center(child: Text(s.shareFooter, style: TextStyle(
-                        fontSize: 10, color: textMuted, fontStyle: FontStyle.italic))),
-                    ],
-                  ),
-                ),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+            decoration: BoxDecoration(
+              color: p.surface,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: p.isDark ? null : [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 24, offset: const Offset(0, 8)),
               ],
             ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const AppGlyph(size: 22),
+                const SizedBox(width: 8),
+                Text(s.appName, style: TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: -0.3, color: p.label)),
+                const Spacer(),
+                Text(_dateLabel(s), style: TextStyle(fontSize: 13, color: p.secondary)),
+              ]),
+              const SizedBox(height: 18),
+              Text(s.grandTotal, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: p.secondary)),
+              const SizedBox(height: 2),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(_fmt(s, result.grandTotal), style: TextStyle(
+                  fontSize: 40, fontWeight: FontWeight.w700, letterSpacing: -1.2, color: p.label)),
+              ),
+              const SizedBox(height: 16),
+              for (final pr in result.personResults)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    Avatar(person: pr.person, size: 32),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(pr.person.name, style: TextStyle(
+                      fontSize: 17, letterSpacing: -0.4, color: p.label))),
+                    Text(_fmt(s, pr.total), style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.4, color: p.label,
+                      fontFeatures: const [ui.FontFeature.tabularFigures()])),
+                  ]),
+                ),
+              const SizedBox(height: 10),
+              Center(child: Text(s.shareFooter, style: TextStyle(fontSize: 12, color: p.tertiary))),
+            ]),
           ),
         ),
-        const SizedBox(height: 8),
 
-        // ── FULL BREAKDOWN (visible in app only) ─────────────────────────────
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: cardColor,
-            border: Border.all(color: accent.withValues(alpha: 0.2)),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(s.perPerson, style: TextStyle(
-                fontSize: 10, fontWeight: FontWeight.w700,
-                color: textHint, letterSpacing: .7)),
-              const SizedBox(height: 8),
-              ...result.personResults.map((pr) =>
-                _PersonBlock(pr: pr, bill: bill, isDark: isDark, s: s)),
-            ],
-          ),
+        const SizedBox(height: 16),
+
+        // ── Actions ─────────────────────────────────────────────────────────
+        Row(children: [
+          Expanded(child: _Action(icon: CupertinoIcons.square_arrow_up, label: s.share, onTap: () => _share(s))),
+          const SizedBox(width: 10),
+          Expanded(child: _Action(icon: CupertinoIcons.doc_on_doc, label: s.copy, onTap: () => _copy(s))),
+          const SizedBox(width: 10),
+          Expanded(child: _Action(icon: CupertinoIcons.plus, label: s.newBill,
+              onTap: () { HapticFeedback.mediumImpact(); ref.read(chatProvider.notifier).reset(); })),
+        ]),
+
+        const SizedBox(height: 22),
+
+        // ── Per-person breakdown ────────────────────────────────────────────
+        InsetGroup(
+          header: s.breakdown,
+          children: [
+            for (final pr in result.personResults)
+              _PersonRow(pr: pr, items: _itemsOf(pr.person), splitCount: _splitCount, fmt: (v) => _fmt(s, v), s: s),
+          ],
         ),
-
-        // ── BUTTONS ───────────────────────────────────────────────────────────
-        Row(children: [
-          _Btn(
-            label: s.copy, icon: Icons.copy_rounded,
-            primary: true, accentDark: accentDark, textMuted: textMuted,
-            onTap: () async {
-              await Clipboard.setData(ClipboardData(text: _buildShareText(s)));
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(s.copied),
-                    duration: const Duration(seconds: 2)));
-              }
-            },
-          ),
-          const SizedBox(width: 7),
-          _Btn(
-            label: s.share, icon: Icons.share_rounded,
-            accentDark: accentDark, textMuted: textMuted,
-            onTap: () => _shareAsImage(context, s),
-          ),
-          const SizedBox(width: 7),
-          _Btn(
-            label: s.newBill, icon: Icons.refresh_rounded,
-            accentDark: accentDark, textMuted: textMuted,
-            onTap: () => ref.read(chatProvider.notifier).reset(),
-          ),
-        ]),
-      ],
-    );
-  }
-}
-
-class _PersonBlock extends StatelessWidget {
-  final PersonResult pr;
-  final Bill bill;
-  final bool isDark;
-  final S s;
-
-  const _PersonBlock({
-    required this.pr, required this.bill,
-    required this.isDark, required this.s});
-
-  @override
-  Widget build(BuildContext context) {
-    final accent    = isDark ? AppTheme.darkAccent    : AppTheme.lightAccent;
-    final textMuted = isDark ? AppTheme.darkTextMuted : AppTheme.lightTextMuted;
-    final textHint  = isDark ? AppTheme.darkTextHint  : AppTheme.lightTextHint;
-    final cardBg    = isDark
-        ? Colors.white.withValues(alpha: 0.03)
-        : Colors.black.withValues(alpha: 0.03);
-
-    final pct = (pr.itemsSubtotal /
-        (bill.subtotal == 0 ? 1 : bill.subtotal) * 100)
-        .toStringAsFixed(1);
-
-    final myItems = bill.items.where((it) =>
-      it.personIds.isEmpty
-          ? bill.people.map((p) => p.id).contains(pr.person.id)
-          : it.personIds.contains(pr.person.id)
-    ).toList();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: cardBg, borderRadius: BorderRadius.circular(10)),
-      child: Column(children: [
-        Row(children: [
-          CircleAvatar(
-            radius: 13,
-            backgroundColor: pr.person.color.withValues(alpha: 0.15),
-            child: Text(pr.person.name.characters.first.toUpperCase(),
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                color: pr.person.color)),
-          ),
-          const SizedBox(width: 8),
-          Text(pr.person.name, style: TextStyle(
-            fontSize: 13, fontWeight: FontWeight.w600,
-            color: isDark ? AppTheme.darkTextPrimary : AppTheme.lightTextPrimary)),
-          const Spacer(),
-          FittedBox(fit: BoxFit.scaleDown,
-            child: Text(fmtAmount(pr.total, bill.currency),
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800,
-                color: accent))),
-        ]),
-        ...myItems.map((it) {
-          final assigned = it.personIds.isEmpty
-              ? bill.people.map((p) => p.id).toList()
-              : it.personIds;
-          final share  = it.price / assigned.length;
-          final isShared = assigned.length > 1;
-          return _Line(
-            label: it.name + (isShared ? ' (${s.shared})' : ''),
-            value: fmtAmount(share, bill.currency),
-            color: textMuted,
-          );
-        }),
-        if (pr.vatShare > 0)
-          _Line(
-            label: '${s.vatLabel} ${bill.extras.vatPct.toStringAsFixed(0)}% × $pct%',
-            value: fmtAmount(pr.vatShare, bill.currency),
-            color: textHint),
-        if (pr.serviceShare > 0)
-          _Line(
-            label: '${s.serviceLabel} ${bill.extras.servicePct.toStringAsFixed(0)}% × $pct%',
-            value: fmtAmount(pr.serviceShare, bill.currency),
-            color: textHint),
-        if (pr.tipShare > 0)
-          _Line(
-            label: '${s.tipLabel} ${bill.extras.tipPct.toStringAsFixed(0)}% × $pct%',
-            value: fmtAmount(pr.tipShare, bill.currency),
-            color: textHint),
       ]),
     );
   }
-}
 
-class _Line extends StatelessWidget {
-  final String label, value;
-  final Color color;
-  const _Line({required this.label, required this.value, required this.color});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 5),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Flexible(child: Text(label, style: TextStyle(fontSize: 11, color: color))),
-        Text(value, style: TextStyle(fontSize: 11, color: color)),
-      ]),
-    );
+  String _dateLabel(S s) {
+    final d = bill.date;
+    final str = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+    return s.isAr ? toArabicDigits(str) : str;
   }
 }
 
-class _Btn extends StatelessWidget {
-  final String label; final IconData icon;
-  final VoidCallback onTap; final bool primary;
-  final Color accentDark, textMuted;
-  const _Btn({required this.label, required this.icon, required this.onTap,
-    required this.accentDark, required this.textMuted, this.primary = false});
+class _Action extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _Action({required this.icon, required this.label, required this.onTap});
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Expanded(child: GestureDetector(
+    final p = Palette.of(context);
+    return PressableScale(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(
-          color: primary ? accentDark : (isDark
-              ? Colors.white.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06)),
-          borderRadius: BorderRadius.circular(9),
-          border: primary ? null : Border.all(color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.1)),
-        ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 13, color: primary ? Colors.white : textMuted),
-          const SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-            color: primary ? Colors.white : textMuted)),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(14)),
+        child: Column(children: [
+          Icon(icon, color: p.accent, size: 22),
+          const SizedBox(height: 4),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: p.accent)),
         ]),
       ),
-    ));
+    );
+  }
+}
+
+class _PersonRow extends StatefulWidget {
+  final PersonResult pr;
+  final List<BillItem> items;
+  final int Function(BillItem) splitCount;
+  final String Function(double) fmt;
+  final S s;
+  const _PersonRow({required this.pr, required this.items, required this.splitCount, required this.fmt, required this.s});
+  @override State<_PersonRow> createState() => _PersonRowState();
+}
+
+class _PersonRowState extends State<_PersonRow> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p  = Palette.of(context);
+    final pr = widget.pr;
+    final s  = widget.s;
+
+    Widget line(String label, String value, {Color? color}) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(children: [
+        Expanded(child: Text(label, style: TextStyle(fontSize: 15, color: color ?? p.secondary))),
+        Text(value, style: TextStyle(fontSize: 15, color: color ?? p.secondary,
+            fontFeatures: const [ui.FontFeature.tabularFigures()])),
+      ]),
+    );
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () { HapticFeedback.selectionClick(); setState(() => _open = !_open); },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        child: Column(children: [
+          Row(children: [
+            Avatar(person: pr.person, size: 34),
+            const SizedBox(width: 12),
+            Expanded(child: Text(pr.person.name, style: TextStyle(fontSize: 17, letterSpacing: -0.4, color: p.label))),
+            Text(widget.fmt(pr.total), style: TextStyle(
+              fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.4, color: p.label)),
+            const SizedBox(width: 6),
+            AnimatedRotation(
+              turns: _open ? 0.25 : 0,
+              duration: const Duration(milliseconds: 200),
+              child: Icon(CupertinoIcons.chevron_right, size: 16, color: p.tertiary),
+            ),
+          ]),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: !_open ? const SizedBox(width: double.infinity) : Padding(
+              padding: const EdgeInsetsDirectional.only(start: 46, top: 4),
+              child: Column(children: [
+                for (final it in widget.items)
+                  line(widget.splitCount(it) > 1 ? '${it.name} · ${s.sharedTag} ÷${widget.splitCount(it)}' : it.name,
+                      widget.fmt(it.price / widget.splitCount(it))),
+                if (pr.discountShare > 0) line(s.discountLabel, '−${widget.fmt(pr.discountShare)}', color: p.green),
+                if (pr.vatShare > 0)      line(s.vatLabel, widget.fmt(pr.vatShare)),
+                if (pr.serviceShare > 0)  line(s.serviceLabel, widget.fmt(pr.serviceShare)),
+                if (pr.tipShare > 0)      line(s.tipLabel, widget.fmt(pr.tipShare)),
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
   }
 }

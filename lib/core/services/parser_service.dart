@@ -2,7 +2,6 @@
 
 import '../models/person.dart';
 import '../utils/number_parser.dart';
-import '../utils/currency.dart';
 
 // ── People parser ─────────────────────────────────────────────────────────────
 
@@ -77,7 +76,7 @@ List<String> _splitIntoItemLines(String input) {
         result.add(current.trim());
         current = part;
       } else {
-        current += ', ' + part;
+        current += ', $part';
       }
     }
     result.add(current.trim());
@@ -139,37 +138,6 @@ Person? _matchPerson(String raw, List<Person> people) {
   }
   return null;
 }
-
-// ── Extras parser ─────────────────────────────────────────────────────────────
-
-class ParsedExtras {
-  final double? vatPct;
-  final double? servicePct;
-  final double? tipPct;
-  const ParsedExtras({this.vatPct, this.servicePct, this.tipPct});
-}
-
-ParsedExtras parseExtras(String input) {
-  final text = input.toLowerCase();
-  double? extract(List<String> keywords) {
-    for (final kw in keywords) {
-      final pattern = RegExp(kw + r'[^0-9]*(\d+(?:\.\d{1,2})?)');
-      final m = pattern.firstMatch(text);
-      if (m != null) {
-        final val = double.tryParse(m.group(1)!);
-        if (val != null && val >= 0 && val <= 100) return val;
-      }
-    }
-    return null;
-  }
-  return ParsedExtras(
-    vatPct:     extract(['vat', 'tax', 'ضريبة', 'ضريبه']),
-    servicePct: extract(['service charge', 'service', 'خدمة', 'خدمه']),
-    tipPct:     extract(['tip', 'gratuity', 'إكرامية', 'إكراميه', 'بقشيش']),
-  );
-}
-
-// ── Number parser ─────────────────────────────────────────────────────────────
 
 // ── Number parser ─────────────────────────────────────────────────────────────
 double? parseNumber(String input) {

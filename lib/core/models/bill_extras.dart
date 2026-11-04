@@ -4,7 +4,7 @@ class BillExtras {
   final double servicePct;    // e.g. 10.0 means 10%
   final double tipPct;        // e.g. 15.0 means 15% (optional)
   final double discountPct;   // e.g. 10.0 means 10% off subtotal
-  final double discountFixed; // e.g. 50.0 means $50 off subtotal
+  final double discountFixed; // e.g. 50.0 means 50 off subtotal
 
   const BillExtras({
     this.vatPct = 0,
@@ -16,20 +16,25 @@ class BillExtras {
 
   factory BillExtras.empty() => const BillExtras();
 
-  // Discount applied first on subtotal
+  bool get hasDiscount => discountPct > 0 || discountFixed > 0;
+
+  /// Discount is applied first, on the item subtotal. Never exceeds the subtotal.
   double discountAmount(double subtotal) {
-    if (discountPct > 0) return subtotal * discountPct / 100;
-    if (discountFixed > 0) return discountFixed.clamp(0, subtotal);
+    if (discountPct > 0) return subtotal * discountPct.clamp(0, 100) / 100;
+    if (discountFixed > 0) return discountFixed.clamp(0, subtotal).toDouble();
     return 0;
   }
 
-  // VAT/service/tip calculated on discounted subtotal
+  /// VAT / service / tip are calculated on the discounted subtotal.
   double discountedSubtotal(double subtotal) => subtotal - discountAmount(subtotal);
   double vatAmount(double subtotal)     => discountedSubtotal(subtotal) * vatPct / 100;
   double serviceAmount(double subtotal) => discountedSubtotal(subtotal) * servicePct / 100;
   double tipAmount(double subtotal)     => discountedSubtotal(subtotal) * tipPct / 100;
   double totalExtras(double subtotal)   =>
       vatAmount(subtotal) + serviceAmount(subtotal) + tipAmount(subtotal);
+
+  /// What is actually paid: discounted subtotal + VAT + service + tip.
+  double grandTotal(double subtotal) => discountedSubtotal(subtotal) + totalExtras(subtotal);
 
   BillExtras copyWith({
     double? vatPct, double? servicePct, double? tipPct,

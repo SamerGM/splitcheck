@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image/image.dart' as img;
 import 'parser_service.dart';
-import '../models/person.dart';
 
 class OcrResult {
   final String rawText;
@@ -24,20 +23,20 @@ class OcrService {
   final _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
   static const String _apiKey = String.fromEnvironment('GOOGLE_VISION_API_KEY');
 
-  Future<OcrResult> scanReceipt(File imageFile, {List<Person> knownPeople = const []}) async {
+  Future<OcrResult> scanReceipt(File imageFile) async {
     // Preprocess image
     final processedFile = await _preprocessImage(imageFile);
 
     // Try Cloud Vision API first
     String rawText = '';
-    try {
-      rawText = await _cloudVisionOcr(processedFile);
-    } catch (e) {
-      // Fallback to ML Kit
-      rawText = await _mlKitOcr(processedFile);
+    if (_apiKey.isNotEmpty) {
+      try {
+        rawText = await _cloudVisionOcr(processedFile);
+      } catch (_) {
+        rawText = ''; // fall through to on-device ML Kit
+      }
     }
-
-    if (rawText.isEmpty) {
+    if (rawText.trim().isEmpty) {
       rawText = await _mlKitOcr(processedFile);
     }
 
@@ -47,7 +46,7 @@ class OcrService {
     }
 
     final isArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(rawText);
-    final items = _parseReceiptText(rawText, knownPeople: knownPeople);
+    final items = _parseReceiptText(rawText);
 
     return OcrResult(rawText: rawText, items: items, isArabic: isArabic);
   }
@@ -62,9 +61,9 @@ class OcrService {
       body: jsonEncode({
         'requests': [{
           'image': {'content': base64Image},
+          // One feature only — each feature is billed separately.
           'features': [
-            {'type': 'TEXT_DETECTION', 'maxResults': 1},
-            {'type': 'DOCUMENT_TEXT_DETECTION', 'maxResults': 1},
+            {'type': 'DOCUMENT_TEXT_DETECTION'},
           ],
           'imageContext': {
             'languageHints': ['en', 'ar'],
@@ -124,12 +123,12 @@ class OcrService {
     }
   }
 
-  List<ParsedItem> _parseReceiptText(String text, {required List<Person> knownPeople}) {
+  List<ParsedItem> _parseReceiptText(String text) {
     final lines = text.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     final items = <ParsedItem>[];
 
     final skipKeywords = RegExp(
-      r'\b(total|subtotal|sub.?total|tax|vat|service|tip|gratuity|discount|change|cash|card|receipt|thank|welcome|visit|amount|balance|due|paid|tender)\b',
+      r'\b(total|subtotal|sub.?total|tax|vat|trn|service|tip|gratuity|discount|change|cash|card|visa|mastercard|receipt|invoice|bill|table|order|check|guest|cover|server|cashier|date|time|tel|phone|thank|welcome|visit|amount|balance|due|paid|tender|qty)\b',
       caseSensitive: false,
     );
 
@@ -150,7 +149,7 @@ class OcrService {
       RegExp(r'^(.+?)\s{2,}(\d+[\.,]\d{1,2})\s*$'),
       RegExp(r'^(.+?)\s+(\d+[\.,]\d{1,2})\s*$'),
       RegExp(r'^(\d+[\.,]\d{1,2})\s+(.+)$'),
-      RegExp(r'^(.+?)\s+(\d{1,4})\s*$'),
+      // (Bare integers like "Table 12" are deliberately NOT treated as prices.)
     ];
 
     for (int i = 0; i < patterns.length; i++) {
@@ -166,7 +165,8 @@ class OcrService {
         }
         name = name.replaceAll(RegExp(r'^\d+\s*[xX]\s*'), '').replaceAll(RegExp(r'[*|#@]'), '').trim();
         final price = double.tryParse(priceStr.replaceAll(',', '.'));
-        if (name.isNotEmpty && price != null && price > 0 && price < 10000) {
+        final hasLetters = RegExp(r'[A-Za-z\u0600-\u06FF]').hasMatch(name);
+        if (hasLetters && price != null && price > 0 && price < 10000) {
           return ParsedItem(name: name, price: price, personNames: const []);
         }
       }

@@ -6,11 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../../core/models/models.dart';
 import '../../core/services/providers.dart';
 import '../../core/services/parser_service.dart';
-import '../../core/services/edit_parser.dart';
 import '../../core/services/split_calculator.dart';
 import '../../core/services/settings_provider.dart';
 import '../../core/utils/currency.dart';
-import '../../core/utils/number_parser.dart';
 import '../../core/utils/strings.dart';
 import 'chat_message.dart';
 
@@ -21,21 +19,28 @@ final chatProvider = NotifierProvider<FlowController, List<ChatMessage>>(
 class FlowController extends Notifier<List<ChatMessage>> {
   static const _uuid = Uuid();
 
-  // Item being built
-  String _pendingItemName  = '';
-  String _pendingItemPrice = '';
-  int    _totalItems       = 0;
-  int    _currentItemIndex = 0;
+  // People
+  int _expectedPeople = 0;
+  List<Person> _previousPeople = const []; // kept while re-entering names so IDs survive
 
-  // Edit state
-  int    _editingItemIndex = -1;
-  String _editSubStep      = ''; // 'name', 'price', 'who'
-  bool   _editingFromMenu  = false; // when true, go back to confirm after edit
+  // Item being built
+  String _pendingName  = '';
+  double _pendingPrice = 0;
+  int    _totalItems   = 0;
+  int    _currentIndex = 0;
+
+  // Editing
+  int    _editingIndex = -1;
+  String _editSubStep  = ''; // '', 'name', 'price', 'who'
+  bool   _returnToConfirm = false; // set when editing from the final summary
+
+  // Discount
+  String _discountMode = ''; // '', 'pct', 'fixed'
 
   @override
   List<ChatMessage> build() {
     Future.microtask(() async {
-      try { await _start(); } catch (e) {}
+      try { await _start(); } catch (_) {}
     });
     return [];
   }
@@ -45,13 +50,14 @@ class FlowController extends Notifier<List<ChatMessage>> {
   FlowStep          get _step       => ref.read(flowStepProvider);
   String            get _curr       => ref.read(currencyProvider);
   S                 get _s          => ref.read(stringsProvider);
-  
-  // Format amount respecting current language
+
   String _fmt(double amount) {
     final s = _s;
-    final str = fmtAmount(amount, _curr);
+    final str = fmtAmount(amount, _curr, arabic: s.isAr);
     return s.isAr ? toArabicDigits(str) : str;
   }
+
+  String _pct(double n) => _s.fmtPct(n);
 
   void _setStep(FlowStep s) => ref.read(flowStepProvider.notifier).value = s;
 
@@ -59,11 +65,37 @@ class FlowController extends Notifier<List<ChatMessage>> {
     state = [...state, ChatMessage(role: MessageRole.user, text: text)];
   }
 
-  Future<void> _bot(String text, {List<QuickChip>? chips, Widget? widget, int ms = 500}) async {
+  Future<void> _bot(String text, {List<QuickChip>? chips, int ms = 450}) async {
     ref.read(isTypingProvider.notifier).value = true;
     await Future.delayed(Duration(milliseconds: ms));
     ref.read(isTypingProvider.notifier).value = false;
-    state = [...state, ChatMessage(role: MessageRole.bot, text: text, chips: chips, inlineWidget: widget)];
+    // A new question makes every older button stale — disable them so an old
+    // tap can't jump the flow back to a previous step.
+    if (chips != null && chips.isNotEmpty) {
+      for (final m in state) {
+        for (final c in m.chips ?? const <QuickChip>[]) { c.used = true; }
+      }
+    }
+    state = [...state, ChatMessage(role: MessageRole.bot, text: text, chips: chips)];
+  }
+
+  /// Called by the UI when a quick-reply button is tapped.
+  void chipTapped(ChatMessage msg, QuickChip chip) {
+    if (chip.used) return;
+    for (final c in msg.chips ?? const <QuickChip>[]) { c.used = true; }
+    _addUser(chip.label);
+    chip.onTap();
+  }
+
+  String _nameOf(String id) => _draftState.people
+      .firstWhere((p) => p.id == id,
+          orElse: () => const Person(id: '', name: '?', color: Color(0xFF000000)))
+      .name;
+
+  String _whoLabel(BillItem it) {
+    final valid = it.personIds.where((id) => _draftState.people.any((p) => p.id == id)).toList();
+    if (valid.isEmpty || valid.length == _draftState.people.length) return _s.everyoneLower;
+    return valid.map(_nameOf).join(', ');
   }
 
   Future<void> handleInput(String text) async {
@@ -71,56 +103,64 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _addUser(text);
 
     switch (_step) {
-      case FlowStep.peopleCount: _handlePeopleCount(text); break;
-      case FlowStep.people:     _handlePeople(text);    break;
-      case FlowStep.itemMethod: break; // handled by chips
-      case FlowStep.itemCount:  _handleItemCount(text); break;
-      case FlowStep.itemName:   _handleItemName(text);  break;
-      case FlowStep.itemPrice:  _handleItemPrice(text); break;
-      case FlowStep.itemWho:    _handleItemWhoText(text); break;
-      case FlowStep.itemSummary: break; // handled by chips
-      case FlowStep.itemEdit:   _handleItemEditStep(text); break;
-      case FlowStep.editMenu:   break; // handled by chips
-      case FlowStep.vat:        _handleVat(text, requireConfirm: true); break;
-      case FlowStep.service:    _handleService(text, requireConfirm: true); break;
-      case FlowStep.tip:        _handleTip(text, requireConfirm: true); break;
-      case FlowStep.discount:   _handleDiscount(text); break;
-      case FlowStep.confirm:    _handleConfirm(text); break;
-      case FlowStep.result:
-        _bot(_s.billDone, ms: 200);
+      case FlowStep.peopleCount: await _handlePeopleCount(text); break;
+      case FlowStep.people:      await _handlePeople(text);      break;
+      case FlowStep.itemCount:   await _handleItemCount(text);   break;
+      case FlowStep.itemName:    await _handleItemName(text);    break;
+      case FlowStep.itemPrice:   await _handleItemPrice(text);   break;
+      case FlowStep.itemWho:     await _handleItemWhoText(text); break;
+      case FlowStep.itemEdit:    await _handleItemEditStep(text); break;
+      case FlowStep.itemSummary:
+      case FlowStep.editMenu:
+        await _bot(_s.tapAButton, ms: 200);
         break;
+      case FlowStep.vat:      await _handleVat(text);      break;
+      case FlowStep.service:  await _handleService(text);  break;
+      case FlowStep.tip:      await _handleTip(text);      break;
+      case FlowStep.discount: await _handleDiscount(text); break;
+      case FlowStep.confirm:  await _handleConfirm(text);  break;
+      case FlowStep.result:   await _bot(_s.billDone, ms: 200); break;
     }
   }
 
-  // ═══════════════════ STEP 1 — PEOPLE COUNT ══════════════════════════════
+  // ═══════════════════ STEP 1 — PEOPLE ═════════════════════════════════════
+
   Future<void> _start() async {
     _setStep(FlowStep.peopleCount);
     final s = _s;
-    await _bot('\${s.welcome}\n\n\${s.howManyPeople}');
+    await _bot('${s.welcome}\n\n${s.howManyPeople}', chips: [
+      for (final n in [2, 3, 4, 5, 6])
+        QuickChip(label: s.fmtNum(n.toDouble(), decimals: 0), onTap: () => _setPeopleCount(n)),
+    ]);
   }
 
   Future<void> _handlePeopleCount(String text) async {
-    final s = _s;
     final n = parseNumber(text)?.toInt();
-    if (n == null || n <= 0) {
-      await _bot(s.pleaseEnterValidNumber, ms: 200);
+    if (n == null || n <= 0 || n > 50) {
+      await _bot(_s.pleaseEnterValidNumber, ms: 200);
       return;
     }
-    _setStep(FlowStep.people);
-    await _bot('\${s.peopleCountPrompt(n)}\n\${s.namesExample}');
+    await _setPeopleCount(n);
   }
+
+  Future<void> _setPeopleCount(int n) async {
+    _expectedPeople = n;
+    _setStep(FlowStep.people);
+    await _bot('${_s.peopleCountPrompt(n)}\n${_s.namesExample}', ms: 300);
+  }
+
   Future<void> _handlePeople(String text) async {
     final s = _s;
     final low = text.toLowerCase().trim();
 
     if (_draftState.people.isNotEmpty) {
-      if (low == 'yes' || low == 'y' || low == 'نعم' || low == 'ok' || low == 'correct') {
-        _confirmPeople();
+      if (const ['yes', 'y', 'ok', 'correct', 'نعم', 'اي', 'ايوه', 'تمام'].contains(low)) {
+        await _confirmPeople();
         return;
       }
-      if (low == 'no' || low == 'n' || low == 'لا' || low == 're-enter' || low == 'edit') {
-        await _bot(s.typeNamesAgain, ms: 200);
+      if (const ['no', 'n', 're-enter', 'لا'].contains(low)) {
         _draft.setPeople([]);
+        await _bot(s.typeNamesAgain, ms: 200);
         return;
       }
     }
@@ -131,154 +171,176 @@ class FlowController extends Notifier<List<ChatMessage>> {
       return;
     }
 
-    // Add to existing people if any
-    final existing = _draftState.people;
-    final allNames = [...existing.map((p) => p.name), ...names];
-    final uniqueNames = allNames.toSet().toList();
+    // Merge with names already entered; de-duplicate case-insensitively.
+    final unique = <String>[];
+    for (final n in [..._draftState.people.map((p) => p.name), ...names]) {
+      if (!unique.any((u) => u.toLowerCase() == n.toLowerCase())) unique.add(n);
+    }
 
-    _draft.setPeople(uniqueNames.asMap().entries.map((e) => Person(
-      id: _uuid.v4(),
-      name: e.value,
-      color: kPersonColors[e.key % kPersonColors.length],
-    )).toList());
+    // Re-use the old ID (and colour) for a name that was already on the bill,
+    // so item assignments survive "Edit people".
+    final known = [..._previousPeople, ..._draftState.people];
+    _draft.setPeople([
+      for (var i = 0; i < unique.length; i++)
+        known.firstWhere(
+          (p) => p.name.toLowerCase() == unique[i].toLowerCase(),
+          orElse: () => Person(
+            id: _uuid.v4(),
+            name: unique[i],
+            color: kPersonColors[i % kPersonColors.length],
+          ),
+        ),
+    ]);
 
-    await _bot('${s.gotIt(uniqueNames.join(', '))}\n\n${s.isCorrect}', chips: [
-      QuickChip(label: s.yes, onTap: () => _confirmPeople()),
+    var msg = s.gotIt(unique.join(s.isAr ? '، ' : ', '));
+    if (_expectedPeople > 0 && unique.length != _expectedPeople) {
+      msg += '\n\n${s.countMismatch(_expectedPeople, unique.length)}';
+    }
+    await _bot('$msg\n\n${s.isCorrect}', chips: [
+      QuickChip(label: s.yes, onTap: _confirmPeople),
       QuickChip(label: s.noReenter, onTap: () async {
         _draft.setPeople([]);
         await _bot(s.typeNamesAgain, ms: 200);
       }),
-      QuickChip(label: s.addMoreNames, onTap: () async {
-        await _bot(s.typeNamesAgain, ms: 200);
-      }),
+      QuickChip(label: s.addMoreNames, onTap: () => _bot(s.typeMoreNames, ms: 200)),
     ]);
   }
 
   Future<void> _confirmPeople() async {
+    if (_draftState.people.isEmpty) {
+      await _bot(_s.typeNamesAgain, ms: 200);
+      return;
+    }
+    // Drop assignments that point at people who are no longer on the bill.
+    final ids = _draftState.people.map((p) => p.id).toSet();
+    _draft.setItems([
+      for (final it in _draftState.items)
+        BillItem(id: it.id, name: it.name, price: it.price,
+            personIds: it.personIds.where(ids.contains).toList()),
+    ]);
+    _previousPeople = const [];
+    _expectedPeople = 0;
+
     await _bot(_s.peopleConfirmed, ms: 250);
-    _askItemCount();
+    if (_returnToConfirm) {
+      await _showFinalConfirm();
+    } else {
+      await _askItemCount();
+    }
   }
 
-  // ═══════════════════ STEP 2 — ITEM COUNT ══════════════════════════════════
+  // ═══════════════════ STEP 2 — ITEMS ══════════════════════════════════════
 
-  Future<void> _askItemCount() async {
+  Future<void> _askItemCount({bool more = false}) async {
     _setStep(FlowStep.itemCount);
-    await _bot(_s.howManyItems, ms: 300);
+    await _bot(more ? _s.howManyMoreItems : '${_s.howManyItems}\n\n${_s.scanTip}', ms: 300);
   }
 
   Future<void> _handleItemCount(String text) async {
-    final s = _s;
-    final parsed = parseNumber(text.trim());
-    final n = parsed?.toInt();
-    if (n == null || n <= 0) {
-      await _bot(s.pleaseEnterValidNumber, ms: 200);
+    final n = parseNumber(text.trim())?.toInt();
+    if (n == null || n <= 0 || n > 100) {
+      await _bot(_s.pleaseEnterValidNumber, ms: 200);
       return;
     }
-    _totalItems = _currentItemIndex + n;
-    _askItemName();
+    _currentIndex = _draftState.items.length;
+    _totalItems   = _currentIndex + n;
+    await _askItemName();
   }
-
-  // ═══════════════════ STEP 3 — ITEMS ONE BY ONE ═══════════════════════════
 
   Future<void> _askItemName() async {
     _setStep(FlowStep.itemName);
-    await _bot(_s.itemNamePrompt(_currentItemIndex + 1, _totalItems), ms: 300);
+    await _bot(_s.itemNamePrompt(_currentIndex + 1, _totalItems), ms: 300);
+  }
+
+  bool _nameTaken(String name, {int exceptIndex = -1}) {
+    final items = _draftState.items;
+    for (var i = 0; i < items.length; i++) {
+      if (i != exceptIndex && items[i].name.toLowerCase() == name.toLowerCase()) return true;
+    }
+    return false;
   }
 
   Future<void> _handleItemName(String text) async {
     final name = text.trim();
-    // Check for duplicate item name
-    final existing = _draftState.items.map((i) => i.name.toLowerCase()).toList();
-    if (existing.contains(name.toLowerCase())) {
-      await _bot('"$name" already exists. Please enter a different item name.', ms: 300);
+    if (_nameTaken(name)) {
+      await _bot(_s.itemExists(name), ms: 300);
       return;
     }
-    _pendingItemName = name;
+    _pendingName = name;
     _setStep(FlowStep.itemPrice);
-    await _bot(_s.itemPricePrompt(_pendingItemName), ms: 300);
+    await _bot(_s.itemPricePrompt(name), ms: 300);
   }
 
   Future<void> _handleItemPrice(String text) async {
-    final s = _s;
     final price = parseNumber(text.trim());
     if (price == null || price <= 0) {
-      await _bot(s.pleaseEnterValidNumber, ms: 200);
+      await _bot(_s.pleaseEnterValidNumber, ms: 200);
       return;
     }
-    _pendingItemPrice = _fmt(price);
+    _pendingPrice = price;
+    _editSubStep = '';
     _setStep(FlowStep.itemWho);
-
-    await _bot(
-      _s.itemWhoPrompt(_pendingItemName, _pendingItemPrice),
-      ms: 300,
-    );
+    await _bot(_s.itemWhoPrompt(_pendingName, _fmt(price)), ms: 300);
   }
 
+  /// Typed answer to "who had it?" (the picker sheet calls [confirmSelectedPeople]).
   Future<void> _handleItemWhoText(String text) async {
     final s = _s;
+    final people = _draftState.people;
     final low = text.toLowerCase().trim();
 
-    // Check for "everyone" keywords
-    final sharedKeywords = ['everyone', 'all', 'shared', 'الكل', 'الجميع', 'كل', 'مُقسمة'];
-    if (sharedKeywords.contains(low)) {
-      await confirmSelectedPeople(_draftState.people.map((p) => p.id).toList());
+    const everyone = ['everyone', 'all', 'shared', 'everybody', 'الكل', 'الجميع', 'كل', 'مُقسمة', 'مقسمة'];
+    if (everyone.contains(low)) {
+      await confirmSelectedPeople(people.map((p) => p.id).toList());
       return;
     }
 
-    // Try to match names
-    final names = text.split(RegExp(r',|،|\band\b|\bو\b|&|\+|\s+', caseSensitive: false))
+    Person? match(String token) {
+      final t = token.toLowerCase();
+      for (final p in people) { if (p.name.toLowerCase() == t) return p; }
+      final starts = people.where((p) => p.name.toLowerCase().startsWith(t)).toList();
+      return starts.length == 1 ? starts.first : null; // only an unambiguous prefix
+    }
+
+    // Split on explicit separators first, so two-word names keep working.
+    final tokens = text
+        .split(RegExp(r',|،|\band\b|\s+و\s*|&|\+', caseSensitive: false))
         .map((n) => n.trim())
-        .where((n) => n.isNotEmpty)
-        .toList();
+        .where((n) => n.isNotEmpty);
 
-    final matchedIds = <String>[];
+    final matched = <String>[];
     final unmatched = <String>[];
-
-    for (final name in names) {
-      final match = _draftState.people.firstWhere(
-        (p) => p.name.toLowerCase() == name.toLowerCase() ||
-               p.name.toLowerCase().contains(name.toLowerCase()),
-        orElse: () => const Person(id: '', name: '', color: Color(0xFF000000)),
-      );
-      if (match.id.isNotEmpty) {
-        if (!matchedIds.contains(match.id)) matchedIds.add(match.id);
-      } else {
-        unmatched.add(name);
+    for (final token in tokens) {
+      final whole = match(token);
+      if (whole != null) {
+        if (!matched.contains(whole.id)) matched.add(whole.id);
+        continue;
+      }
+      // "Ahmed Sara" without commas → try word by word.
+      for (final word in token.split(RegExp(r'\s+'))) {
+        final p = match(word);
+        if (p == null) {
+          unmatched.add(word);
+        } else if (!matched.contains(p.id)) {
+          matched.add(p.id);
+        }
       }
     }
 
     if (unmatched.isNotEmpty) {
-      final validNames = _draftState.people.map((p) => p.name).join(', ');
-      await _bot(
-        '❌ "${unmatched.join(', ')}" not found in the list.\n\nValid names: $validNames\n\nPlease try again or select from the popup.',
-        ms: 300,
-      );
+      await _bot(s.namesNotOnBill(unmatched.join(', '), people.map((p) => p.name).join(', ')), ms: 300);
       return;
     }
-
-    if (matchedIds.isEmpty) {
-      await _bot('Please select at least one person or type a valid name.', ms: 300);
-      return;
-    }
-
-    await confirmSelectedPeople(matchedIds);
+    await confirmSelectedPeople(matched);
   }
 
-  // Name selection is handled via widget in chat_screen
-  // But we also need chip-based selection here
-  final List<String> _selectedPersonIds = [];
-
-  void _selectPersonForItem(String personId) {
-    if (_selectedPersonIds.contains(personId)) {
-      _selectedPersonIds.remove(personId);
-    } else {
-      _selectedPersonIds.add(personId);
+  /// Who should already be ticked when the picker opens (when editing an item).
+  List<String> get preselectedIds {
+    if (_editSubStep != 'who' || _editingIndex < 0 || _editingIndex >= _draftState.items.length) {
+      return const [];
     }
-  }
-
-  Future<void> _selectEveryoneForItem() async {
-    final personIds = _draftState.people.map((p) => p.id).toList();
-    _confirmWhoOrdered(personIds);
+    final ids = _draftState.items[_editingIndex].personIds;
+    return ids.isEmpty ? _draftState.people.map((p) => p.id).toList() : ids;
   }
 
   Future<void> confirmSelectedPeople(List<String> personIds) async {
@@ -286,208 +348,139 @@ class FlowController extends Notifier<List<ChatMessage>> {
       await _bot(_s.selectAtLeastOne, ms: 200);
       return;
     }
-    _confirmWhoOrdered(personIds);
-  }
-
-  Future<void> _confirmWhoOrdered(List<String> personIds) async {
-    final priceStr = normalizeDigits(_pendingItemPrice.replaceAll('\$', '').trim());
-    final price = double.tryParse(priceStr) ?? 0.0;
-
-    _draft.addItem(BillItem(
-      id: _uuid.v4(),
-      name: _pendingItemName,
-      price: price,
-      personIds: personIds,
-    ));
-
-    final who = personIds.isEmpty
-        ? _s.shared
-        : personIds.map((id) =>
-            _draftState.people.firstWhere((p) => p.id == id,
-              orElse: () => const Person(id: '', name: '?', color: Color(0xFF000000))).name
-          ).join(', ');
-
-    await _bot(
-      _s.itemConfirmed(_pendingItemName, _pendingItemPrice, who),
-      ms: 200,
-    );
-
-    _currentItemIndex++;
-    _pendingItemName  = '';
-    _pendingItemPrice = '';
-
-    if (_currentItemIndex < _totalItems) {
-      _askItemName();
+    if (_editSubStep == 'who' && _editingIndex >= 0) {
+      await _updateItemWho(personIds);
     } else {
-      _showItemSummary();
+      await _addPendingItem(personIds);
     }
   }
 
-  // ═══════════════════ ITEM SUMMARY ════════════════════════════════════════
+  Future<void> _addPendingItem(List<String> personIds) async {
+    // Everyone selected → store as shared (empty list) so it stays correct if people change.
+    final ids = personIds.length == _draftState.people.length ? <String>[] : personIds;
+    final item = BillItem(id: _uuid.v4(), name: _pendingName, price: _pendingPrice, personIds: ids);
+    _draft.addItem(item);
 
-  Future<void> _showItemSummary() async {
-    _setStep(FlowStep.itemSummary);
-    final s = _s;
-    final subtotal = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
+    await _bot(_s.itemConfirmed(item.name, _fmt(item.price), _whoLabel(item)), ms: 200);
 
-    final itemList = _draftState.items.asMap().entries.map((e) {
-      final it = e.value;
-      final who = it.personIds.isEmpty
-          ? s.shared
-          : it.personIds.map((id) =>
-              _draftState.people.firstWhere((p) => p.id == id,
-                orElse: () => const Person(id: '', name: '?', color: Color(0xFF000000))).name
-            ).join(', ');
-      return '${e.key + 1}. ${it.name}  ${_fmt(it.price)}  → $who';
-    }).join('\n');
+    _currentIndex++;
+    _pendingName = '';
+    _pendingPrice = 0;
 
-    await _bot(
-      '${s.allItemsAdded(_fmt(subtotal))}\n\n$itemList',
-      chips: [
-        QuickChip(label: s.looksGood, onTap: () {
-          _addUser(s.looksGood);
-          _askVat();
-        }),
-        QuickChip(label: s.addMoreItemsBtn, onTap: () async {
-          await _bot(s.howManyMoreItems, ms: 200);
-          _setStep(FlowStep.itemCount);
-        }),
-        QuickChip(label: s.editExistingItem, onTap: () => _showItemEditList()),
-      ],
-      ms: 300,
-    );
+    if (_currentIndex < _totalItems) {
+      await _askItemName();
+    } else {
+      await _showItemSummary();
+    }
   }
 
-  // ═══════════════════ ITEM EDIT ════════════════════════════════════════════
+  // ═══════════════════ ITEM SUMMARY & EDITING ══════════════════════════════
+
+  Future<void> _showItemSummary() async {
+    final s = _s;
+    final items = _draftState.items;
+    if (items.isEmpty) {
+      await _bot(s.noItemsYet, ms: 200);
+      await _askItemCount();
+      return;
+    }
+    _setStep(FlowStep.itemSummary);
+    _editSubStep = '';
+    _editingIndex = -1;
+    final subtotal = items.fold(0.0, (sum, i) => sum + i.price);
+    final list = items.asMap().entries
+        .map((e) => '${e.key + 1}. ${e.value.name} · ${_fmt(e.value.price)} → ${_whoLabel(e.value)}')
+        .join('\n');
+
+    await _bot('${s.allItemsAdded(_fmt(subtotal))}\n\n$list', chips: [
+      QuickChip(label: s.looksGood, onTap: () async {
+        if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askVat(); }
+      }),
+      QuickChip(label: s.addMoreItemsBtn, onTap: () => _askItemCount(more: true)),
+      QuickChip(label: s.editExistingItem, onTap: _showItemEditList),
+    ], ms: 300);
+  }
 
   Future<void> _showItemEditList() async {
     _setStep(FlowStep.itemEdit);
+    _editSubStep = '';
     final items = _draftState.items;
-    await _bot(
-      _s.whichItemToEdit,
-      chips: items.asMap().entries.map((e) =>
-        QuickChip(
-          label: '${e.key + 1}. ${e.value.name} ${_fmt(e.value.price)}',
-          onTap: () => _showItemEditOptions(e.key),
-        )
-      ).toList(),
-      ms: 200,
-    );
+    await _bot(_s.whichItemToEdit, chips: [
+      for (var i = 0; i < items.length; i++)
+        QuickChip(label: '${items[i].name} · ${_fmt(items[i].price)}', onTap: () => _showItemEditOptions(i)),
+      QuickChip(label: _s.back, onTap: _showItemSummary),
+    ], ms: 200);
   }
 
   Future<void> _showItemEditOptions(int index) async {
-    _editingItemIndex = index;
+    _editingIndex = index;
     final item = _draftState.items[index];
     final s = _s;
-    await _bot(
-      '${s.whatToChangeInItem}: ${item.name} ${_fmt(item.price)}',
-      chips: [
-        QuickChip(label: s.editName, onTap: () async {
-          _editSubStep = 'name';
-          _setStep(FlowStep.itemEdit);
-          await _bot(s.enterNewName, ms: 200);
-        }),
-        QuickChip(label: s.editPrice, onTap: () async {
-          _editSubStep = 'price';
-          _setStep(FlowStep.itemEdit);
-          await _bot(s.enterNewPrice, ms: 200);
-        }),
-        QuickChip(label: s.editWhoOrdered, onTap: () async {
-          _editSubStep = 'who';
-          _setStep(FlowStep.itemWho);
-          await _bot(
-            _s.itemWhoPrompt(item.name, _fmt(item.price)),
-            ms: 200,
-          );
-        }),
-        QuickChip(label: s.deleteItem, onTap: () async {
-          final items = List<BillItem>.from(_draftState.items);
-          final name = items[_editingItemIndex].name;
-          items.removeAt(_editingItemIndex);
-          ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
-          await _bot(_s.itemRemoved(name), ms: 200);
-          _showItemSummary();
-        }),
-      ],
-      ms: 200,
-    );
+    await _bot(s.whatToChangeInItem(item.name), chips: [
+      QuickChip(label: s.editName, onTap: () async {
+        _editSubStep = 'name';
+        _setStep(FlowStep.itemEdit);
+        await _bot(s.enterNewName, ms: 200);
+      }),
+      QuickChip(label: s.editPrice, onTap: () async {
+        _editSubStep = 'price';
+        _setStep(FlowStep.itemEdit);
+        await _bot(s.enterNewPrice, ms: 200);
+      }),
+      QuickChip(label: s.editWhoOrdered, onTap: () async {
+        _editSubStep = 'who';
+        await _bot(s.itemWhoPrompt(item.name, _fmt(item.price)), ms: 200);
+        _setStep(FlowStep.itemWho);
+      }),
+      QuickChip(label: s.deleteItem, onTap: () async {
+        final items = List<BillItem>.from(_draftState.items)..removeAt(index);
+        _draft.setItems(items);
+        await _bot(s.itemRemoved(item.name), ms: 200);
+        await _showItemSummary();
+      }),
+    ], ms: 200);
+  }
+
+  void _replaceItem(BillItem Function(BillItem old) change) {
+    final items = List<BillItem>.from(_draftState.items);
+    items[_editingIndex] = change(items[_editingIndex]);
+    _draft.setItems(items);
   }
 
   Future<void> _handleItemEditStep(String text) async {
-    final items = List<BillItem>.from(_draftState.items);
-    final item = items[_editingItemIndex];
+    if (_editingIndex < 0 || _editingIndex >= _draftState.items.length || _editSubStep.isEmpty) {
+      await _bot(_s.tapAButton, ms: 200);
+      return;
+    }
+    final item = _draftState.items[_editingIndex];
 
     if (_editSubStep == 'name') {
-      items[_editingItemIndex] = BillItem(
-        id: item.id, name: text.trim(),
-        price: item.price, personIds: item.personIds,
-      );
-      ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
-      await _bot(_s.itemUpdated(text.trim()), ms: 200);
-      _showItemSummary();
+      final name = text.trim();
+      if (_nameTaken(name, exceptIndex: _editingIndex)) {
+        await _bot(_s.itemExists(name), ms: 300);
+        return;
+      }
+      _replaceItem((o) => BillItem(id: o.id, name: name, price: o.price, personIds: o.personIds));
+      await _bot(_s.itemUpdated(name), ms: 200);
+      await _showItemSummary();
     } else if (_editSubStep == 'price') {
-      final price = double.tryParse(text.trim().replaceAll(',', '.'));
+      final price = parseNumber(text.trim());
       if (price == null || price <= 0) {
         await _bot(_s.pleaseEnterValidNumber, ms: 200);
         return;
       }
-      items[_editingItemIndex] = BillItem(
-        id: item.id, name: item.name,
-        price: price, personIds: item.personIds,
-      );
-      ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
+      _replaceItem((o) => BillItem(id: o.id, name: o.name, price: price, personIds: o.personIds));
       await _bot(_s.itemUpdated(item.name), ms: 200);
-      _showItemSummary();
+      await _showItemSummary();
     }
   }
 
   Future<void> _updateItemWho(List<String> personIds) async {
-    final items = List<BillItem>.from(_draftState.items);
-    final item = items[_editingItemIndex];
-    items[_editingItemIndex] = BillItem(
-      id: item.id, name: item.name,
-      price: item.price, personIds: personIds,
-    );
-    ref.read(billDraftProvider.notifier).state = _draftState.copyWith(items: items);
-    await _bot(_s.itemUpdated(item.name), ms: 200);
-    _showItemSummary();
-  }
-
-  // ═══════════════════ EDIT MENU (from final confirm) ═══════════════════════
-
-  Future<void> _showEditMenu() async {
-    _setStep(FlowStep.editMenu);
-    final s = _s;
-    await _bot(
-      s.whatToEdit,
-      chips: [
-        QuickChip(label: s.editPeople, onTap: () async {
-          _draft.setPeople([]);
-          await _start();
-        }),
-        QuickChip(label: s.editNumberOfItems, onTap: () {
-          _draft.clearItems();
-          _askItemCount();
-        }),
-        QuickChip(label: s.editItems, onTap: () => _showItemEditList()),
-        QuickChip(label: s.editVat, onTap: () {
-          _editingFromMenu = true;
-          _draft.setExtras(_draftState.extras.copyWith(vatPct: 0));
-          _askVat();
-        }),
-        QuickChip(label: s.editService, onTap: () {
-          _editingFromMenu = true;
-          _draft.setExtras(_draftState.extras.copyWith(servicePct: 0));
-          _askService();
-        }),
-        QuickChip(label: s.editTip, onTap: () {
-          _editingFromMenu = true;
-          _draft.setExtras(_draftState.extras.copyWith(tipPct: 0));
-          _askTip();
-        }),
-      ],
-      ms: 200,
-    );
+    final ids = personIds.length == _draftState.people.length ? <String>[] : personIds;
+    final name = _draftState.items[_editingIndex].name;
+    _replaceItem((o) => BillItem(id: o.id, name: o.name, price: o.price, personIds: ids));
+    await _bot(_s.itemUpdated(name), ms: 200);
+    await _showItemSummary();
   }
 
   // ═══════════════════ OCR ═════════════════════════════════════════════════
@@ -497,202 +490,119 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _addUser(s.scanning);
     ref.read(isTypingProvider.notifier).value = true;
     try {
-      final ocr = ref.read(ocrServiceProvider);
-      final result = await ocr.scanReceipt(file, knownPeople: _draftState.people);
+      final result = await ref.read(ocrServiceProvider).scanReceipt(file);
       ref.read(isTypingProvider.notifier).value = false;
-      if (result.isArabic && result.items.isEmpty) {
-        await _bot(s.arabicReceiptDetected, ms: 300,
-          chips: [QuickChip(label: s.addItemsManually, onTap: () async => _bot(s.whatElse, ms: 200))]);
-        return;
-      }
       if (result.items.isEmpty) {
-        await _bot(s.cantReadReceipt, ms: 300);
+        await _bot(result.isArabic ? s.arabicReceiptDetected : s.cantReadReceipt, ms: 300);
+        if (_step != FlowStep.itemCount) await _askItemCount();
         return;
       }
       for (final item in result.items) {
-        _draft.addItem(BillItem(id: _uuid.v4(), name: item.name, price: item.price, personIds: const []));
+        final name = _nameTaken(item.name) ? '${item.name} (2)' : item.name;
+        _draft.addItem(BillItem(id: _uuid.v4(), name: name, price: item.price));
       }
-      final total = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
-      final preview = result.items.take(5).map((i) => '  ${i.name}  ${_fmt(i.price)}').join('\n');
-      final more = result.items.length > 5 ? '\n  +${result.items.length - 5} more' : '';
-      await _bot(
-        '${s.scannedItems(result.items.length)}\n$preview$more\n\nTotal: ${_fmt(total)}\n\n${s.whoOrderedWhat}',
-        chips: [
-          QuickChip(label: s.addMoreItems, onTap: () async => _bot(s.whatElse, ms: 200)),
-          QuickChip(label: s.splitEqually, onTap: () { _addUser(s.splitEqually); _showItemSummary(); }),
-        ],
-      );
-    } catch (e) {
+      _currentIndex = _draftState.items.length;
+      _totalItems   = _currentIndex;
+      await _bot(s.scannedItems(result.items.length), ms: 300);
+      await _showItemSummary();
+    } catch (_) {
       ref.read(isTypingProvider.notifier).value = false;
-      await _bot(_s.cantScanReceipt, ms: 300);
+      await _bot(s.cantScanReceipt, ms: 300);
     }
   }
 
-  // ═══════════════════ STEP VAT ════════════════════════════════════════════
+  // ═══════════════════ VAT / SERVICE / TIP ═════════════════════════════════
+
+  List<QuickChip> _pctChips(List<double> options, String noneLabel, Future<void> Function(double) apply, String customPrompt) => [
+    QuickChip(label: noneLabel, onTap: () => apply(0)),
+    for (final n in options) QuickChip(label: _pct(n), onTap: () => apply(n)),
+    QuickChip(label: _s.custom, onTap: () => _bot(customPrompt, ms: 200)),
+  ];
+
+  Future<double?> _readPct(String text) async {
+    final n = parseNumber(text);
+    if (n == null || n < 0 || n > 100) {
+      await _bot(_s.typeValidPct, ms: 200);
+      return null;
+    }
+    return n;
+  }
 
   Future<void> _askVat() async {
     _setStep(FlowStep.vat);
     final s = _s;
-    await _bot(
-      '${s.step3Title}\n\n${s.quickOptionOrCustom}',
-      chips: [
-        QuickChip(label: s.noVatChip, onTap: () { _addUser(s.noVatChip); _applyVat(0); }),
-        QuickChip(label: '5%',  onTap: () { _addUser('5%');  _applyVat(5);  }),
-        QuickChip(label: '10%', onTap: () { _addUser('10%'); _applyVat(10); }),
-        QuickChip(label: '14%', onTap: () { _addUser('14%'); _applyVat(14); }),
-        QuickChip(label: '15%', onTap: () { _addUser('15%'); _applyVat(15); }),
-        QuickChip(label: '20%', onTap: () { _addUser('20%'); _applyVat(20); }),
-        QuickChip(label: s.custom, onTap: () async {
-          await _bot(s.typeVat, ms: 200);
-        }),
-      ],
-    );
+    await _bot(s.vatQuestion, chips: _pctChips([5, 10, 14, 15], s.noVatChip, _applyVat, s.typeVat));
+  }
+
+  Future<void> _handleVat(String text) async {
+    final n = await _readPct(text);
+    if (n != null) await _applyVat(n);
   }
 
   Future<void> _applyVat(double n) async {
-    final s = _s;
     _draft.setExtras(_draftState.extras.copyWith(vatPct: n));
-    await _bot(n == 0 ? s.noVat : s.vatApplied(n), ms: 250);
-    if (_editingFromMenu) { _editingFromMenu = false; _showFinalConfirm(); return; }
-    _askService();
+    await _bot(n == 0 ? _s.noVat : _s.vatApplied(_pct(n)), ms: 250);
+    if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askService(); }
   }
-
-  Future<void> _handleVat(String text, {bool requireConfirm = true}) async {
-    final s = _s;
-    final n = parseNumber(text);
-    if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
-    _draft.setExtras(_draftState.extras.copyWith(vatPct: n));
-    if (_editingFromMenu) { _editingFromMenu = false; await _bot(n == 0 ? s.noVat : s.vatApplied(n), ms: 250); _showFinalConfirm(); return; }
-    if (!requireConfirm) { _askService(); return; }
-    await _bot(s.vatConfirm(n), chips: [
-      QuickChip(label: s.yes, onTap: () { _addUser(s.yes); _askService(); }),
-      QuickChip(label: s.change, onTap: () async {
-        _draft.setExtras(_draftState.extras.copyWith(vatPct: 0));
-        await _bot(s.typeVat, ms: 200);
-      }),
-    ]);
-  }
-
-  // ═══════════════════ STEP SERVICE ════════════════════════════════════════
 
   Future<void> _askService() async {
     _setStep(FlowStep.service);
     final s = _s;
-    await _bot(
-      '${s.step4Title}\n\n${s.quickOptionOrCustom}',
-      chips: [
-        QuickChip(label: s.noServiceChip, onTap: () { _addUser(s.noServiceChip); _applyService(0); }),
-        QuickChip(label: '5%',  onTap: () { _addUser('5%');  _applyService(5);  }),
-        QuickChip(label: '10%', onTap: () { _addUser('10%'); _applyService(10); }),
-        QuickChip(label: '12%', onTap: () { _addUser('12%'); _applyService(12); }),
-        QuickChip(label: '15%', onTap: () { _addUser('15%'); _applyService(15); }),
-        QuickChip(label: '20%', onTap: () { _addUser('20%'); _applyService(20); }),
-        QuickChip(label: s.custom, onTap: () async {
-          await _bot(s.typeService, ms: 200);
-        }),
-      ],
-    );
+    await _bot(s.serviceQuestion, chips: _pctChips([5, 10, 12, 15], s.noServiceChip, _applyService, s.typeService));
+  }
+
+  Future<void> _handleService(String text) async {
+    final n = await _readPct(text);
+    if (n != null) await _applyService(n);
   }
 
   Future<void> _applyService(double n) async {
-    final s = _s;
     _draft.setExtras(_draftState.extras.copyWith(servicePct: n));
-    await _bot(n == 0 ? s.noService : s.serviceApplied(n), ms: 250);
-    if (_editingFromMenu) { _editingFromMenu = false; _showFinalConfirm(); return; }
-    _askTip();
+    await _bot(n == 0 ? _s.noService : _s.serviceApplied(_pct(n)), ms: 250);
+    if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askTip(); }
   }
-
-  Future<void> _handleService(String text, {bool requireConfirm = true}) async {
-    final s = _s;
-    final n = parseNumber(text);
-    if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
-    _draft.setExtras(_draftState.extras.copyWith(servicePct: n));
-    if (_editingFromMenu) { _editingFromMenu = false; await _bot(n == 0 ? s.noService : s.serviceApplied(n), ms: 250); _showFinalConfirm(); return; }
-    if (!requireConfirm) { _askTip(); return; }
-    await _bot(s.serviceConfirm(n), chips: [
-      QuickChip(label: s.yes, onTap: () { _addUser(s.yes); _askTip(); }),
-      QuickChip(label: s.change, onTap: () async {
-        _draft.setExtras(_draftState.extras.copyWith(servicePct: 0));
-        await _bot(s.typeService, ms: 200);
-      }),
-    ]);
-  }
-
-  // ═══════════════════ STEP TIP ════════════════════════════════════════════
 
   Future<void> _askTip() async {
     _setStep(FlowStep.tip);
     final s = _s;
-    await _bot(
-      '${s.step5Title}\n\n${s.quickOptionOrCustom}',
-      chips: [
-        QuickChip(label: s.noTipChip, onTap: () { _addUser(s.noTipChip); _applyTip(0); }),
-        QuickChip(label: '5%',  onTap: () { _addUser('5%');  _applyTip(5);  }),
-        QuickChip(label: '10%', onTap: () { _addUser('10%'); _applyTip(10); }),
-        QuickChip(label: '15%', onTap: () { _addUser('15%'); _applyTip(15); }),
-        QuickChip(label: '20%', onTap: () { _addUser('20%'); _applyTip(20); }),
-        QuickChip(label: s.custom, onTap: () async {
-          await _bot(s.typeTip, ms: 200);
-        }),
-      ],
-    );
+    await _bot(s.tipQuestion, chips: _pctChips([5, 10, 15, 20], s.noTipChip, _applyTip, s.typeTip));
+  }
+
+  Future<void> _handleTip(String text) async {
+    final n = await _readPct(text);
+    if (n != null) await _applyTip(n);
   }
 
   Future<void> _applyTip(double n) async {
-    final s = _s;
     _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
-    await _bot(n == 0 ? s.noTip : s.tipApplied(n), ms: 250);
-    _editingFromMenu = false;
-    _askDiscount();
+    await _bot(n == 0 ? _s.noTip : _s.tipApplied(_pct(n)), ms: 250);
+    if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askDiscount(); }
   }
 
-  Future<void> _handleTip(String text, {bool requireConfirm = true}) async {
-    final s = _s;
-    final n = parseNumber(text);
-    if (n == null || n < 0) { await _bot(s.typeValidNumber, ms: 200); return; }
-    _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
-    if (_editingFromMenu) { _editingFromMenu = false; await _bot(n == 0 ? s.noTip : s.tipApplied(n), ms: 250); _showFinalConfirm(); return; }
-    if (!requireConfirm) { _askDiscount(); return; }
-    await _bot(s.tipConfirm(n), chips: [
-      QuickChip(label: s.yes, onTap: () { _addUser(s.yes); _showFinalConfirm(); }),
-      QuickChip(label: s.change, onTap: () async {
-        _draft.setExtras(_draftState.extras.copyWith(tipPct: 0));
-        await _bot(s.typeTip, ms: 200);
-      }),
-    ]);
-  }
-
-  // ═══════════════════ STEP DISCOUNT ══════════════════════════════════════
+  // ═══════════════════ DISCOUNT ════════════════════════════════════════════
 
   Future<void> _askDiscount() async {
     _setStep(FlowStep.discount);
+    _discountMode = '';
     final s = _s;
-    await _bot(
-      s.discountQuestion,
-      chips: [
-        QuickChip(label: s.noDiscount, onTap: () {
-          _addUser(s.noDiscount);
-          _draft.setExtras(_draftState.extras.copyWith(discountPct: 0, discountFixed: 0));
-          _showFinalConfirm();
-        }),
-        QuickChip(label: s.percentDiscount, onTap: () async {
-          await _bot(s.enterDiscountPct, ms: 200);
-        }),
-        QuickChip(label: s.fixedDiscount, onTap: () async {
-          await _bot(s.enterDiscountFixed, ms: 200);
-        }),
-      ],
-      ms: 300,
-    );
+    await _bot(s.discountQuestion, chips: [
+      QuickChip(label: s.noDiscount, onTap: () => _applyDiscount(pct: 0, fixed: 0)),
+      QuickChip(label: s.percentDiscount, onTap: () async {
+        _discountMode = 'pct';
+        await _bot(s.enterDiscountPct, ms: 200);
+      }),
+      QuickChip(label: s.fixedDiscount, onTap: () async {
+        _discountMode = 'fixed';
+        await _bot(s.enterDiscountFixed, ms: 200);
+      }),
+    ], ms: 300);
   }
 
   Future<void> _handleDiscount(String text) async {
     final s = _s;
     final low = text.toLowerCase().trim();
-    
-    if (low == 'no' || low == 'none' || low == 'لا' || low == 'بدون') {
-      _draft.setExtras(_draftState.extras.copyWith(discountPct: 0, discountFixed: 0));
-      _showFinalConfirm();
+    if (const ['no', 'none', 'nope', 'لا', 'بدون'].contains(low)) {
+      await _applyDiscount(pct: 0, fixed: 0);
       return;
     }
 
@@ -702,61 +612,108 @@ class FlowController extends Notifier<List<ChatMessage>> {
       return;
     }
 
-    // Determine if percentage or fixed based on context
-    // If number is <= 100 and looks like a percentage
-    if (n <= 100 && !text.contains('\$') && !text.contains('د.')) {
-      _draft.setExtras(_draftState.extras.copyWith(discountPct: n, discountFixed: 0));
-      await _bot(s.discountPctApplied(n), ms: 250);
-    } else {
-      _draft.setExtras(_draftState.extras.copyWith(discountFixed: n, discountPct: 0));
-      await _bot(s.discountFixedApplied(n), ms: 250);
+    var mode = _discountMode;
+    if (mode.isEmpty && text.contains('%')) mode = 'pct';
+    if (mode.isEmpty) {
+      // Ambiguous ("20") — let the user say which they meant.
+      await _bot(s.discountWhichKind, chips: [
+        if (n <= 100) QuickChip(label: s.discountPctOption(_pct(n)), onTap: () => _applyDiscount(pct: n, fixed: 0)),
+        QuickChip(label: s.discountFixedOption(_fmt(n)), onTap: () => _applyDiscount(pct: 0, fixed: n)),
+      ], ms: 200);
+      return;
     }
-    _showFinalConfirm();
+
+    if (mode == 'pct') {
+      if (n > 100) { await _bot(s.typeValidPct, ms: 200); return; }
+      await _applyDiscount(pct: n, fixed: 0);
+    } else {
+      await _applyDiscount(pct: 0, fixed: n);
+    }
+  }
+
+  Future<void> _applyDiscount({required double pct, required double fixed}) async {
+    final s = _s;
+    _draft.setExtras(_draftState.extras.copyWith(discountPct: pct, discountFixed: fixed));
+    _discountMode = '';
+    final sub = _draftState.items.fold(0.0, (a, i) => a + i.price);
+    if (pct > 0) {
+      await _bot(s.discountPctApplied(_pct(pct)), ms: 250);
+    } else if (fixed > 0) {
+      final applied = _draftState.extras.discountAmount(sub);
+      await _bot(fixed > sub ? s.discountCapped(_fmt(applied)) : s.discountFixedApplied(_fmt(fixed)), ms: 250);
+    } else {
+      await _bot(s.noDiscountApplied, ms: 250);
+    }
+    await _showFinalConfirm();
   }
 
   // ═══════════════════ FINAL CONFIRM ═══════════════════════════════════════
 
   Future<void> _showFinalConfirm() async {
+    _returnToConfirm = false;
     _setStep(FlowStep.confirm);
     final s = _s;
-    final sub = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
-    final ext = _draftState.extras;
-    final vatAmt = ext.vatAmount(sub);
-    final svcAmt = ext.serviceAmount(sub);
-    final tipAmt = ext.tipAmount(sub);
-    final total  = sub + vatAmt + svcAmt + tipAmt;
+    final sub  = _draftState.items.fold(0.0, (sum, i) => sum + i.price);
+    final ext  = _draftState.extras;
     final lines = [
-      '${s.peopleLabel}   ${_draftState.people.map((p) => p.name).join(', ')}',
-      '${s.itemsCount(_draftState.items.length)}',
-      '${s.subtotal(_fmt(sub))}',
+      '👥 ${_draftState.people.map((p) => p.name).join(', ')}',
+      '🧾 ${s.itemsCount(_draftState.items.length)}',
       '',
-      ext.vatPct > 0     ? s.vatLine(ext.vatPct, _fmt(vatAmt))         : s.vatNone,
-      ext.servicePct > 0 ? s.serviceLine(ext.servicePct, _fmt(svcAmt)) : s.serviceNone,
-      ext.tipPct > 0     ? s.tipLine(ext.tipPct, _fmt(tipAmt))         : s.tipNone,
+      '${s.subtotalLabel}: ${_fmt(sub)}',
+      if (ext.hasDiscount) '${s.discountLabel}: −${_fmt(ext.discountAmount(sub))}',
+      if (ext.vatPct > 0)     '${s.vatLabel} ${_pct(ext.vatPct)}: ${_fmt(ext.vatAmount(sub))}',
+      if (ext.servicePct > 0) '${s.serviceLabel} ${_pct(ext.servicePct)}: ${_fmt(ext.serviceAmount(sub))}',
+      if (ext.tipPct > 0)     '${s.tipLabel} ${_pct(ext.tipPct)}: ${_fmt(ext.tipAmount(sub))}',
       '',
-      s.grandTotalLine(_fmt(total)),
+      '${s.grandTotal}: ${_fmt(ext.grandTotal(sub))}',
     ].join('\n');
-    await _bot(
-      '${s.finalConfirmTitle}\n\n$lines\n\n${s.allGoodQuestion}',
-      chips: [
-        QuickChip(label: s.everythingLooksGood, onTap: () { _addUser(s.everythingLooksGood); _calcAndShow(); }),
-        QuickChip(label: s.editBtn, onTap: () => _showEditMenu()),
-      ],
-    );
+    await _bot('${s.finalConfirmTitle}\n\n$lines', chips: [
+      QuickChip(label: s.calculate, onTap: () async => _calcAndShow()),
+      QuickChip(label: s.editBtn, onTap: _showEditMenu),
+    ]);
   }
 
   Future<void> _handleConfirm(String text) async {
-    final low = text.toLowerCase();
-    if (low.contains('yes') || low.contains('ok') || low.contains('calculate') ||
-        low.contains('go') || low.contains('نعم') || low.contains('احسب') ||
-        low.contains('looks good') || low.contains('everything')) {
+    final low = text.toLowerCase().trim();
+    final no  = RegExp(r'\b(no|edit|change|wait)\b').hasMatch(low) || low.contains('لا') || low.contains('تعديل');
+    final yes = RegExp(r'\b(yes|ok|okay|go|calculate|split|good|yep|sure)\b').hasMatch(low) ||
+        low.contains('نعم') || low.contains('احسب') || low.contains('تمام');
+    if (no) {
+      await _showEditMenu();
+    } else if (yes) {
       _calcAndShow();
     } else {
       await _bot(_s.tapCalculate, ms: 200);
     }
   }
 
-  // ═══════════════════ RESULT ═══════════════════════════════════════════════
+  Future<void> _showEditMenu() async {
+    _setStep(FlowStep.editMenu);
+    _returnToConfirm = true;
+    final s = _s;
+    await _bot(s.whatToEdit, chips: [
+      QuickChip(label: s.editPeople, onTap: () async {
+        _previousPeople = _draftState.people;
+        _expectedPeople = 0;
+        _draft.setPeople([]);
+        _setStep(FlowStep.people);
+        await _bot(s.reenterPeople(_previousPeople.map((p) => p.name).join(', ')), ms: 200);
+      }),
+      QuickChip(label: s.editItems, onTap: _showItemEditList),
+      QuickChip(label: s.editNumberOfItems, onTap: () async {
+        _draft.clearItems();
+        await _askItemCount(); // after the new items, "Looks good" returns here
+
+      }),
+      QuickChip(label: s.vatLabel, onTap: _askVat),
+      QuickChip(label: s.serviceLabel, onTap: _askService),
+      QuickChip(label: s.tipLabel, onTap: _askTip),
+      QuickChip(label: s.discountLabel, onTap: _askDiscount),
+      QuickChip(label: s.back, onTap: _showFinalConfirm),
+    ], ms: 200);
+  }
+
+  // ═══════════════════ RESULT ══════════════════════════════════════════════
 
   void _calcAndShow() {
     _setStep(FlowStep.result);
@@ -764,19 +721,31 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final result = SplitCalculator.calculate(bill);
     ref.read(splitResultProvider.notifier).value = result;
     ref.read(finalBillProvider.notifier).value   = bill;
-    _bot(_s.finalSplit(bill.merchant), ms: 400);
+    _bot(_s.finalSplit, ms: 400);
+    _saveToHistory(bill);
+  }
+
+  Future<void> _saveToHistory(Bill bill) async {
+    try {
+      final svc = ref.read(historyServiceProvider);
+      await svc.init();
+      await svc.save(bill);
+    } catch (_) {/* history is best-effort */}
   }
 
   Future<void> reset() async {
-    _pendingItemName  = '';
-    _pendingItemPrice = '';
-    _totalItems       = 0;
-    _currentItemIndex = 0;
-    _editingItemIndex = -1;
-    _editSubStep      = '';
-    _selectedPersonIds.clear();
+    _expectedPeople = 0;
+    _previousPeople = const [];
+    _pendingName    = '';
+    _pendingPrice   = 0;
+    _totalItems     = 0;
+    _currentIndex   = 0;
+    _editingIndex   = -1;
+    _editSubStep    = '';
+    _returnToConfirm = false;
+    _discountMode   = '';
     _draft.reset();
-    _setStep(FlowStep.people);
+    ref.read(isTypingProvider.notifier).value = false;
     ref.read(splitResultProvider.notifier).value = null;
     ref.read(finalBillProvider.notifier).value   = null;
     state = [];

@@ -62,6 +62,26 @@ final languageProvider = NotifierProvider<LanguageNotifier, String>(
   LanguageNotifier.new,
 );
 
+// ── Currency ──────────────────────────────────────────────────────────────────
+
+class CurrencyNotifier extends Notifier<String> {
+  @override
+  String build() => 'AED';
+
+  Future<void> init() async {
+    state = ref.read(settingsServiceProvider).loadCurrency();
+  }
+
+  Future<void> setCurrency(String code) async {
+    state = code;
+    await ref.read(settingsServiceProvider).saveCurrency(code);
+  }
+}
+
+final currencyProvider = NotifierProvider<CurrencyNotifier, String>(
+  CurrencyNotifier.new,
+);
+
 // ── Strings ───────────────────────────────────────────────────────────────────
 
 final stringsProvider = Provider<S>((ref) {

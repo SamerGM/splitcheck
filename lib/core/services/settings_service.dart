@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SettingsService {
   static const _themeKey    = 'theme_mode';
   static const _languageKey = 'language';
+  static const _currencyKey = 'currency';
 
   late SharedPreferences _prefs;
 
@@ -43,5 +44,13 @@ class SettingsService {
 
   Future<void> saveLanguage(String lang) async {
     await _prefs.setString(_languageKey, lang);
+  }
+
+  // ── Currency ───────────────────────────────────────────────────────────────
+
+  String loadCurrency() => _prefs.getString(_currencyKey) ?? 'AED';
+
+  Future<void> saveCurrency(String code) async {
+    await _prefs.setString(_currencyKey, code);
   }
 }
