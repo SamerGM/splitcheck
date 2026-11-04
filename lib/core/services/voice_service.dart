@@ -9,7 +9,7 @@ class VoiceService {
   bool _initialized = false;
 
   String localeId(VoiceLocale locale) =>
-      locale == VoiceLocale.arabic ? 'ar-SA' : 'en-US';
+      locale == VoiceLocale.arabic ? 'ar_EG' : 'en_US';
 
   Future<bool> initialize() async {
     if (_initialized) return true;
@@ -29,17 +29,19 @@ class VoiceService {
     final ready = await initialize();
     if (!ready) { onDone(); return; }
 
-    // For Arabic, try multiple locales for better recognition
+    // For Arabic, prefer Egyptian, then other Arabic locales the device has.
     String selectedLocale = localeId(locale);
     if (locale == VoiceLocale.arabic) {
-      final available = await _speech.locales();
-      final ids = available.map((l) => l.localeId).toList();
-      for (final candidate in ['ar-SA', 'ar-EG', 'ar-AE', 'ar']) {
-        if (ids.any((id) => id.startsWith(candidate.split('-')[0]))) {
-          selectedLocale = candidate;
-          break;
-        }
-      }
+      final ids = (await _speech.locales())
+          .map((l) => l.localeId.replaceAll('_', '-').toLowerCase())
+          .toList();
+      const preferred = ['ar-eg', 'ar-sa', 'ar-ae', 'ar'];
+      final hit = preferred.firstWhere(
+        (c) => ids.contains(c),
+        orElse: () => ids.firstWhere((id) => id.startsWith('ar'), orElse: () => 'ar-eg'),
+      );
+      final parts = hit.split('-'); // 'ar-eg' → 'ar_EG' (engine format)
+      selectedLocale = parts.length == 2 ? '${parts[0]}_${parts[1].toUpperCase()}' : parts[0];
     }
 
     await _speech.listen(

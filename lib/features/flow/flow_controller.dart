@@ -154,11 +154,11 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final low = text.toLowerCase().trim();
 
     if (_draftState.people.isNotEmpty) {
-      if (const ['yes', 'y', 'ok', 'correct', 'نعم', 'اي', 'ايوه', 'تمام'].contains(low)) {
+      if (const ['yes', 'y', 'ok', 'correct', 'نعم', 'اي', 'ايوه', 'أيوه', 'آه', 'اه', 'تمام', 'ماشي'].contains(low)) {
         await _confirmPeople();
         return;
       }
-      if (const ['no', 'n', 're-enter', 'لا'].contains(low)) {
+      if (const ['no', 'n', 're-enter', 'لا', 'لأ'].contains(low)) {
         _draft.setPeople([]);
         await _bot(s.typeNamesAgain, ms: 200);
         return;
@@ -601,7 +601,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _handleDiscount(String text) async {
     final s = _s;
     final low = text.toLowerCase().trim();
-    if (const ['no', 'none', 'nope', 'لا', 'بدون'].contains(low)) {
+    if (const ['no', 'none', 'nope', 'لا', 'لأ', 'بدون', 'مفيش', 'من غير'].contains(low)) {
       await _applyDiscount(pct: 0, fixed: 0);
       return;
     }
@@ -675,9 +675,9 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> _handleConfirm(String text) async {
     final low = text.toLowerCase().trim();
-    final no  = RegExp(r'\b(no|edit|change|wait)\b').hasMatch(low) || low.contains('لا') || low.contains('تعديل');
+    final no  = RegExp(r'\b(no|edit|change|wait)\b').hasMatch(low) || low.contains('لا') || low.contains('لأ') || low.contains('تعديل') || low.contains('عدّل') || low.contains('عدل');
     final yes = RegExp(r'\b(yes|ok|okay|go|calculate|split|good|yep|sure)\b').hasMatch(low) ||
-        low.contains('نعم') || low.contains('احسب') || low.contains('تمام');
+        low.contains('نعم') || low.contains('احسب') || low.contains('تمام') || low.contains('أيوه') || low.contains('ايوه') || low.contains('قسّمها') || low.contains('ماشي');
     if (no) {
       await _showEditMenu();
     } else if (yes) {
