@@ -301,8 +301,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     FlowStep.itemSummary || FlowStep.itemEdit => 0.55,
     FlowStep.vat         => 0.65,
     FlowStep.service     => 0.73,
-    FlowStep.tip         => 0.81,
-    FlowStep.discount    => 0.88,
+    FlowStep.tip         => 0.79,
+    FlowStep.delivery    => 0.84,
+    FlowStep.discount    => 0.89,
     FlowStep.confirm || FlowStep.editMenu => 0.95,
     FlowStep.result      => 1.0,
   };

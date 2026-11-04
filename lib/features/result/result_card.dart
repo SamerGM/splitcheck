@@ -58,6 +58,7 @@ class _ResultCardState extends ConsumerState<ResultCard> {
       if (pr.vatShare > 0)      buf.writeln('   • ${s.vatLabel} ${_fmt(s, pr.vatShare)}');
       if (pr.serviceShare > 0)  buf.writeln('   • ${s.serviceLabel} ${_fmt(s, pr.serviceShare)}');
       if (pr.tipShare > 0)      buf.writeln('   • ${s.tipLabel} ${_fmt(s, pr.tipShare)}');
+      if (pr.deliveryShare > 0) buf.writeln('   • ${s.deliveryLabel} ${_fmt(s, pr.deliveryShare)}');
     }
     buf
       ..writeln()
@@ -275,6 +276,7 @@ class _PersonRowState extends State<_PersonRow> {
                 if (pr.vatShare > 0)      line(s.vatLabel, widget.fmt(pr.vatShare)),
                 if (pr.serviceShare > 0)  line(s.serviceLabel, widget.fmt(pr.serviceShare)),
                 if (pr.tipShare > 0)      line(s.tipLabel, widget.fmt(pr.tipShare)),
+                if (pr.deliveryShare > 0) line(s.deliveryLabel, widget.fmt(pr.deliveryShare)),
               ]),
             ),
           ),

@@ -107,6 +107,24 @@ void main() {
     });
   });
 
+  group('Delivery', () {
+    test('Delivery fee is split equally, not by what each person ordered', () {
+      final b = Bill(
+        id: 't', merchant: '', date: DateTime.now(), currency: 'USD',
+        people: [p('a','Ahmed'), p('b','Sara')],
+        items: [item('i1','Steak',90,['a']), item('i2','Salad',10,['b'])],
+        extras: const BillExtras(vatPct: 10, deliveryFee: 20),
+      );
+      final r = SplitCalculator.calculate(b);
+      expect(r.grandTotal, closeTo(130, 0.001)); // 100 + 10 VAT + 20 delivery
+      final a = r.personResults.firstWhere((x) => x.person.id == 'a');
+      final s = r.personResults.firstWhere((x) => x.person.id == 'b');
+      expect(a.deliveryShare, 10); expect(s.deliveryShare, 10);
+      expect(a.total, closeTo(109, 0.001)); // 90 + 9 VAT + 10
+      expect(s.total, closeTo(21, 0.001));  // 10 + 1 VAT + 10
+    });
+  });
+
   group('Robustness', () {
     test('Item assigned to a removed person falls back to everyone', () {
       final b = bill([p('a','Ahmed'), p('b','Sara')], [item('i1','Pizza',60,['ghost'])]);

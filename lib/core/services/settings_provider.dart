@@ -66,7 +66,7 @@ final languageProvider = NotifierProvider<LanguageNotifier, String>(
 
 class CurrencyNotifier extends Notifier<String> {
   @override
-  String build() => 'AED';
+  String build() => 'USD';
 
   Future<void> init() async {
     state = ref.read(settingsServiceProvider).loadCurrency();

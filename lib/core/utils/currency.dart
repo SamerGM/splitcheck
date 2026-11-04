@@ -2,6 +2,7 @@
 
 /// Currencies offered in the picker. Code → (English symbol, Arabic symbol, decimals).
 const Map<String, (String, String, int)> kCurrencies = {
+  'USD': ('\$', '\$', 2),
   'AED': ('AED', 'د.إ', 2),
   'SAR': ('SAR', 'ر.س', 2),
   'QAR': ('QAR', 'ر.ق', 2),
@@ -10,7 +11,6 @@ const Map<String, (String, String, int)> kCurrencies = {
   'OMR': ('OMR', 'ر.ع', 3),
   'JOD': ('JOD', 'د.أ', 3),
   'EGP': ('EGP', 'ج.م', 2),
-  'USD': ('\$', '\$', 2),
   'EUR': ('€', '€', 2),
   'GBP': ('£', '£', 2),
 };

@@ -137,6 +137,15 @@ class S {
   String get noTip => _t('No tip ✓', 'بدون بقشيش ✓');
   String tipApplied(String pct) => _t('Tip $pct ✓', 'بقشيش $pct ✓');
 
+  // ── Delivery ───────────────────────────────────────────────────────────────
+  String get deliveryQuestion => _t('Any delivery fee? 🛵', 'في رسوم توصيل؟ 🛵');
+  String get deliveryYes => _t('Yes', 'نعم');
+  String get deliveryNo => _t('No', 'لا');
+  String get enterDelivery => _t('How much is the delivery fee?', 'كام رسوم التوصيل؟');
+  String deliveryApplied(String amt) => _t('Delivery $amt ✓ (split equally)', 'توصيل $amt ✓ (بالتساوي على الكل)');
+  String get noDelivery => _t('No delivery fee ✓', 'بدون توصيل ✓');
+  String get deliveryLabel => _t('Delivery', 'التوصيل');
+
   // ── Discount ───────────────────────────────────────────────────────────────
   String get discountQuestion => _t('Got a discount or voucher? 🎟', 'في خصم أو قسيمة؟ 🎟');
   String get noDiscount => _t('Nope', 'لا');

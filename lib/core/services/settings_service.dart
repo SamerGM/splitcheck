@@ -48,7 +48,7 @@ class SettingsService {
 
   // ── Currency ───────────────────────────────────────────────────────────────
 
-  String loadCurrency() => _prefs.getString(_currencyKey) ?? 'AED';
+  String loadCurrency() => _prefs.getString(_currencyKey) ?? 'USD';
 
   Future<void> saveCurrency(String code) async {
     await _prefs.setString(_currencyKey, code);

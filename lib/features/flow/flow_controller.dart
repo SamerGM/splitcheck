@@ -117,6 +117,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       case FlowStep.vat:      await _handleVat(text);      break;
       case FlowStep.service:  await _handleService(text);  break;
       case FlowStep.tip:      await _handleTip(text);      break;
+      case FlowStep.delivery: await _handleDelivery(text); break;
       case FlowStep.discount: await _handleDiscount(text); break;
       case FlowStep.confirm:  await _handleConfirm(text);  break;
       case FlowStep.result:   await _bot(_s.billDone, ms: 200); break;
@@ -576,6 +577,37 @@ class FlowController extends Notifier<List<ChatMessage>> {
   Future<void> _applyTip(double n) async {
     _draft.setExtras(_draftState.extras.copyWith(tipPct: n));
     await _bot(n == 0 ? _s.noTip : _s.tipApplied(_pct(n)), ms: 250);
+    if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askDelivery(); }
+  }
+
+  // ═══════════════════ DELIVERY ════════════════════════════════════════════
+
+  Future<void> _askDelivery() async {
+    _setStep(FlowStep.delivery);
+    final s = _s;
+    await _bot(s.deliveryQuestion, chips: [
+      QuickChip(label: s.deliveryNo, onTap: () => _applyDelivery(0)),
+      QuickChip(label: s.deliveryYes, onTap: () => _bot(s.enterDelivery, ms: 200)),
+    ], ms: 300);
+  }
+
+  Future<void> _handleDelivery(String text) async {
+    final low = text.toLowerCase().trim();
+    if (const ['yes', 'y', 'نعم', 'ايوه', 'أيوه', 'آه', 'اه'].contains(low)) {
+      await _bot(_s.enterDelivery, ms: 200);
+      return;
+    }
+    final n = parseNumber(text); // "no" / "لا" / "بدون" parse as 0
+    if (n == null || n < 0) {
+      await _bot(_s.pleaseEnterValidNumber, ms: 200);
+      return;
+    }
+    await _applyDelivery(n);
+  }
+
+  Future<void> _applyDelivery(double fee) async {
+    _draft.setExtras(_draftState.extras.copyWith(deliveryFee: fee));
+    await _bot(fee == 0 ? _s.noDelivery : _s.deliveryApplied(_fmt(fee)), ms: 250);
     if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askDiscount(); }
   }
 
@@ -664,6 +696,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       if (ext.vatPct > 0)     '${s.vatLabel} ${_pct(ext.vatPct)}: ${_fmt(ext.vatAmount(sub))}',
       if (ext.servicePct > 0) '${s.serviceLabel} ${_pct(ext.servicePct)}: ${_fmt(ext.serviceAmount(sub))}',
       if (ext.tipPct > 0)     '${s.tipLabel} ${_pct(ext.tipPct)}: ${_fmt(ext.tipAmount(sub))}',
+      if (ext.deliveryFee > 0) '${s.deliveryLabel}: ${_fmt(ext.deliveryFee)}',
       '',
       '${s.grandTotal}: ${_fmt(ext.grandTotal(sub))}',
     ].join('\n');
@@ -708,6 +741,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       QuickChip(label: s.vatLabel, onTap: _askVat),
       QuickChip(label: s.serviceLabel, onTap: _askService),
       QuickChip(label: s.tipLabel, onTap: _askTip),
+      QuickChip(label: s.deliveryLabel, onTap: _askDelivery),
       QuickChip(label: s.discountLabel, onTap: _askDiscount),
       QuickChip(label: s.back, onTap: _showFinalConfirm),
     ], ms: 200);

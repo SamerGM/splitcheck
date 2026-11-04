@@ -53,6 +53,7 @@ class PersonResult {
   final double vatShare;
   final double serviceShare;
   final double tipShare;
+  final double deliveryShare; // equal share of the delivery fee
   final double total;
 
   const PersonResult({
@@ -62,6 +63,7 @@ class PersonResult {
     required this.vatShare,
     required this.serviceShare,
     required this.tipShare,
+    this.deliveryShare = 0,
     required this.total,
   });
 }
@@ -72,6 +74,7 @@ class SplitResult {
   final double vatAmount;
   final double serviceAmount;
   final double tipAmount;
+  final double deliveryFee;
   final double grandTotal;
   final List<PersonResult> personResults;
 
@@ -81,6 +84,7 @@ class SplitResult {
     required this.vatAmount,
     required this.serviceAmount,
     required this.tipAmount,
+    this.deliveryFee = 0,
     required this.grandTotal,
     required this.personResults,
   });

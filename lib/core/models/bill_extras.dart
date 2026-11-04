@@ -5,6 +5,7 @@ class BillExtras {
   final double tipPct;        // e.g. 15.0 means 15% (optional)
   final double discountPct;   // e.g. 10.0 means 10% off subtotal
   final double discountFixed; // e.g. 50.0 means 50 off subtotal
+  final double deliveryFee;   // fixed amount, split equally between everyone
 
   const BillExtras({
     this.vatPct = 0,
@@ -12,6 +13,7 @@ class BillExtras {
     this.tipPct = 0,
     this.discountPct = 0,
     this.discountFixed = 0,
+    this.deliveryFee = 0,
   });
 
   factory BillExtras.empty() => const BillExtras();
@@ -33,23 +35,26 @@ class BillExtras {
   double totalExtras(double subtotal)   =>
       vatAmount(subtotal) + serviceAmount(subtotal) + tipAmount(subtotal);
 
-  /// What is actually paid: discounted subtotal + VAT + service + tip.
-  double grandTotal(double subtotal) => discountedSubtotal(subtotal) + totalExtras(subtotal);
+  /// What is actually paid: discounted subtotal + VAT + service + tip + delivery.
+  double grandTotal(double subtotal) =>
+      discountedSubtotal(subtotal) + totalExtras(subtotal) + deliveryFee;
 
   BillExtras copyWith({
     double? vatPct, double? servicePct, double? tipPct,
-    double? discountPct, double? discountFixed,
+    double? discountPct, double? discountFixed, double? deliveryFee,
   }) => BillExtras(
     vatPct:        vatPct        ?? this.vatPct,
     servicePct:    servicePct    ?? this.servicePct,
     tipPct:        tipPct        ?? this.tipPct,
     discountPct:   discountPct   ?? this.discountPct,
     discountFixed: discountFixed ?? this.discountFixed,
+    deliveryFee:   deliveryFee   ?? this.deliveryFee,
   );
 
   Map<String, dynamic> toJson() => {
     'vatPct': vatPct, 'servicePct': servicePct, 'tipPct': tipPct,
     'discountPct': discountPct, 'discountFixed': discountFixed,
+    'deliveryFee': deliveryFee,
   };
 
   factory BillExtras.fromJson(Map<String, dynamic> j) => BillExtras(
@@ -58,5 +63,6 @@ class BillExtras {
     tipPct:        (j['tipPct']        as num).toDouble(),
     discountPct:   (j['discountPct']   as num? ?? 0).toDouble(),
     discountFixed: (j['discountFixed'] as num? ?? 0).toDouble(),
+    deliveryFee:   (j['deliveryFee']   as num? ?? 0).toDouble(),
   );
 }

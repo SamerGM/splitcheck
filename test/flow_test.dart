@@ -69,7 +69,7 @@ void main() {
 
     // Edit "who had it" on Burger → must UPDATE, not add a new item.
     await tap('Edit an item');
-    await tap('Burger · AED 40.00');
+    await tap('Burger · \$40.00');
     await tap('Who Ordered This Order ?');
     expect(c.read(flowStepProvider), FlowStep.itemWho);
     await ctl().confirmSelectedPeople([id('Sara')]);
@@ -81,7 +81,12 @@ void main() {
     await tap('Looks good 👍');
     await tap('None');            // VAT
     await tap('10%');             // service
-    await say('5');               // typed tip → must go on to the discount step
+    await say('5');               // typed tip → goes on to delivery, then discount
+    expect(c.read(flowStepProvider), FlowStep.delivery);
+    await tap('Yes');
+    expect(lastBot(), contains('How much is the delivery fee'));
+    await say('10');
+    expect(c.read(billDraftProvider).extras.deliveryFee, 10);
     expect(c.read(flowStepProvider), FlowStep.discount);
 
     await tap('Fixed amount');
@@ -91,13 +96,15 @@ void main() {
     expect(ex.discountPct, 0);
     expect(c.read(flowStepProvider), FlowStep.confirm);
     expect(lastBot(), contains('Discount'));
+    expect(lastBot(), contains('Delivery'));
 
     await tap('Split it ✨');
     final r = c.read(splitResultProvider)!;
-    // (100 - 50) = 50, +10% service +5% tip = 57.50
-    expect(r.grandTotal, closeTo(57.5, 0.001));
+    // (100 - 50) = 50, +10% service +5% tip = 57.50, + delivery 10 = 67.50
+    expect(r.grandTotal, closeTo(67.5, 0.001));
     final sum = r.personResults.fold(0.0, (a, p) => a + p.total);
-    expect(sum, closeTo(57.5, 0.001));
+    expect(sum, closeTo(67.5, 0.001));
+    expect(r.personResults.every((p) => (p.deliveryShare - 5).abs() < 1e-9), isTrue);
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('ambiguous discount asks % or amount; edit from summary returns to summary', () async {
@@ -113,6 +120,7 @@ void main() {
     await tap('None');
     await tap('None');
     await tap('No tip');
+    await tap('No');              // no delivery
     await say('10');
     expect(lastBot(), contains('percentage or an amount'));
     await tap('10% off');
