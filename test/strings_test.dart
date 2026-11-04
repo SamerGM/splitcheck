@@ -7,10 +7,11 @@ void main() {
     expect(ar.howManyPeople, 'كم شخص سيتم تقسيم الفاتورة عليهم؟');
     expect(ar.peopleCountPrompt(2), 'تمام، شخصين. ما هي أسماؤهم؟');
     expect(ar.peopleCountPrompt(4), 'تمام، ٤ أشخاص. ما هي أسماؤهم؟');
-    expect(ar.itemPricePrompt('كشري'), 'كشري بكام؟');
-    expect(ar.itemNamePrompt(1, 3), 'الصنف ١ من ٣ — إيه هو؟');
-    expect(ar.countMismatch(3, 2), 'خد بالك: قلت ٣ أشخاص بس أنا عدّيت ٢.');
-    expect(ar.reenterPeople('جمال'), 'أكيد. اكتب كل الأسماء.\nدلوقتي: جمال');
+    expect(ar.itemPricePrompt('كشري'), 'كام سعر كشري؟');
+    expect(ar.itemNamePrompt(1, 3), 'الصنف ١ من ٣ — ايه هو؟');
+    expect(ar.countMismatch(3, 2), 'خد بالك: قلت ٣ أشخاص بس أنا عدّيت ٢');
+    expect(ar.reenterPeople('جمال'), 'أكيد. اكتب كل الأسماء.\nالحالي: جمال');
+    expect(ar.editWhoOrdered, 'مين طلبه ؟');
     expect(ar.yes, 'نعم 👍');
   });
 

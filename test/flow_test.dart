@@ -48,7 +48,7 @@ void main() {
 
   test('full flow with edit-who, typed tip and fixed discount', () async {
     await settle();
-    expect(lastBot(), contains('How many of you'));
+    expect(lastBot(), contains('How many persons will split the check?'));
     expect(lastBot(), isNot(contains(r'${')));
 
     await tap('2');
@@ -70,7 +70,7 @@ void main() {
     // Edit "who had it" on Burger → must UPDATE, not add a new item.
     await tap('Edit an item');
     await tap('Burger · AED 40.00');
-    await tap('Who had it');
+    await tap('Who Ordered This Order ?');
     expect(c.read(flowStepProvider), FlowStep.itemWho);
     await ctl().confirmSelectedPeople([id('Sara')]);
     await settle();
