@@ -214,7 +214,7 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
         ]),
         SectionLabel(s.priceLabel),
         VoiceField(controller: _price, placeholder: '0', numeric: true,
-            prefixText: ref.watch(currencyProvider), onChanged: (_) => setState(() {})),
+            prefixText: currencySymbol(ref.watch(currencyProvider), arabic: s.isAr), onChanged: (_) => setState(() {})),
         SectionLabel(s.whoShared),
         Wrap(spacing: 8, runSpacing: 8, children: [
           Pill(label: '👥 ${s.everyone}', on: everyone, onTap: () => setState(() {

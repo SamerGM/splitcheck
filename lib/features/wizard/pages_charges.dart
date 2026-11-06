@@ -11,6 +11,7 @@ import '../../core/models/models.dart';
 import '../../core/services/providers.dart';
 import '../../core/services/settings_provider.dart';
 import '../../core/utils/countries.dart';
+import '../../core/utils/currency.dart';
 import '../../core/utils/number_parser.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
@@ -94,7 +95,7 @@ class _DeliveryPageState extends ConsumerState<DeliveryPage> {
       onPrimary: (v == null || v < 0) ? null : () => ref.read(wizardProvider.notifier).setDelivery(v),
       children: [
         VoiceField(controller: _fee, placeholder: '0', numeric: true, large: true,
-            prefixText: ref.watch(currencyProvider), onChanged: (_) => setState(() {})),
+            prefixText: currencySymbol(ref.watch(currencyProvider), arabic: s.isAr), onChanged: (_) => setState(() {})),
         SecondaryButton(s.noDeliveryFee, onTap: () => ref.read(wizardProvider.notifier).setDelivery(0)),
       ],
     );
@@ -142,7 +143,7 @@ class _DiscountPageState extends ConsumerState<DiscountPage> {
         ),
         const SizedBox(height: 14),
         VoiceField(controller: _amt, placeholder: '0', numeric: true, large: true,
-            prefixText: _fixed ? ref.watch(currencyProvider) : null, suffixText: _fixed ? null : '%',
+            prefixText: _fixed ? currencySymbol(ref.watch(currencyProvider), arabic: s.isAr) : null, suffixText: _fixed ? null : '%',
             onChanged: (_) => setState(() {})),
         if (v != null && !_fixed && v > 100)
           Padding(padding: const EdgeInsets.only(top: 6),
@@ -305,7 +306,7 @@ class _ChargesEditPageState extends ConsumerState<ChargesEditPage> {
     final p = Palette.of(context);
     final s = ref.watch(stringsProvider);
     final w = ref.watch(wizardProvider);
-    final cur = ref.watch(currencyProvider);
+    final cur = currencySymbol(ref.watch(currencyProvider), arabic: s.isAr);
 
     Widget pctRow(String label, TextEditingController c) => Padding(
       padding: const EdgeInsets.only(bottom: 10),

@@ -77,11 +77,11 @@ class WizardPage extends ConsumerWidget {
                 width: primaryLabel == null ? null : 110,
                 child: primaryLabel == null
                     ? null
-                    : AppleButton(label: '‹ ${s.back}', filled: false,
+                    : AppleButton(label: (s.isAr ? '› ${s.back}' : '‹ ${s.back}'), filled: false,
                         onTap: () { HapticFeedback.selectionClick(); ref.read(wizardProvider.notifier).back(); }),
               ),
             if (canBack && primaryLabel == null)
-              Expanded(child: AppleButton(label: '‹ ${s.back}', filled: false,
+              Expanded(child: AppleButton(label: (s.isAr ? '› ${s.back}' : '‹ ${s.back}'), filled: false,
                   onTap: () { HapticFeedback.selectionClick(); ref.read(wizardProvider.notifier).back(); })),
             if (canBack && primaryLabel != null) const SizedBox(width: 10),
             if (primaryLabel != null)

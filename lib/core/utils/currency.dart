@@ -62,3 +62,10 @@ const Map<String, (String, String)> kCurrencyNames = {
   'INR': ('Indian Rupee', 'روبية هندية'),
   'PKR': ('Pakistani Rupee', 'روبية باكستانية'),
 };
+
+/// Short currency symbol for labels in the app language: "EGP" / "ج.م", "\$".
+String currencySymbol(String currency, {bool arabic = false}) {
+  final c = kCurrencies[currency];
+  if (c == null) return currency;
+  return arabic ? c.$2 : c.$1;
+}
