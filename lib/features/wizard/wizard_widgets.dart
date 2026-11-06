@@ -106,7 +106,9 @@ class OptionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return Padding(
+    return Semantics(
+      button: true, selected: selected, label: '$title. $hint', excludeSemantics: true,
+      child: Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: PressableScale(
         scale: .98,
@@ -131,7 +133,7 @@ class OptionCard extends StatelessWidget {
           ]),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -154,7 +156,9 @@ class NumberGrid extends StatelessWidget {
       childAspectRatio: columns >= 5 ? 1.15 : 1.6,
       children: [
         for (var i = 0; i < labels.length; i++)
-          PressableScale(
+          Semantics(
+            button: true, selected: i == selected, label: labels[i], excludeSemantics: true,
+            child: PressableScale(
             onTap: () { HapticFeedback.selectionClick(); onTap(i); },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
@@ -167,7 +171,7 @@ class NumberGrid extends StatelessWidget {
                 fontSize: labels[i].length > 3 ? 16 : 22, fontWeight: FontWeight.w600,
                 color: i == selected ? Colors.white : p.label)),
             ),
-          ),
+          )),
       ],
     );
   }
@@ -184,7 +188,9 @@ class Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Palette.of(context);
-    return PressableScale(
+    return Semantics(
+      button: true, selected: on, label: label, excludeSemantics: true,
+      child: PressableScale(
       onTap: () { HapticFeedback.selectionClick(); onTap(); },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -198,7 +204,7 @@ class Pill extends StatelessWidget {
           fontSize: soft ? 14 : 15, fontWeight: soft ? FontWeight.w500 : FontWeight.w600,
           color: on ? Colors.white : p.label)),
       ),
-    );
+    ));
   }
 }
 

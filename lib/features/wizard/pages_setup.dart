@@ -87,7 +87,8 @@ class _CountryPageState extends ConsumerState<CountryPage> {
         const SizedBox(height: 12),
         InsetGroup(separatorInset: 58, children: [
           for (final c in list)
-            GestureDetector(
+            Semantics(button: true, label: '${c.name(s.isAr)} ${c.currency}', excludeSemantics: true,
+              child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () { HapticFeedback.selectionClick(); ref.read(wizardProvider.notifier).pickCountry(c); },
               child: Padding(
@@ -104,7 +105,7 @@ class _CountryPageState extends ConsumerState<CountryPage> {
                   else Icon(CupertinoIcons.chevron_forward, color: p.tertiary, size: 16),
                 ]),
               ),
-            ),
+            )),
         ]),
       ],
     );
@@ -221,7 +222,8 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
           SectionLabel(s.orPickGroup),
           InsetGroup(separatorInset: 16, children: [
             for (final g in groups)
-              GestureDetector(
+              Semantics(button: true, label: g.name, excludeSemantics: true,
+                child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () { HapticFeedback.selectionClick(); ref.read(wizardProvider.notifier).useGroup(g); },
                 child: Padding(
@@ -235,7 +237,7 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
                     Icon(CupertinoIcons.chevron_forward, color: p.tertiary, size: 16),
                   ]),
                 ),
-              ),
+              )),
           ]),
         ],
       ],

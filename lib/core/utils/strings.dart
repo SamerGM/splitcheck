@@ -186,7 +186,7 @@ class S {
   String personN(int i) => _t('Person $i', 'شخص ${toArabicDigits('$i')}');
 
   // ── Welcome screen ─────────────────────────────────────────────────────────
-  String get slogan => _t('Split the bill, not the fun.', 'قسّم الفاتورة… مش اللمة');
+  String get slogan => _t('Split the bill hassle-free\nand enjoy your outing 😉', 'قسّم الفاتورة من غير وجع دماغ\nواستمتع بخروجتك 😉');
 
   // ── Country / currency ─────────────────────────────────────────────────────
   String get askCountry => _t('Do you have a preferred country or currency?', 'عندك دولة أو عملة مفضلة؟');

@@ -56,7 +56,12 @@ class AppleButton extends StatelessWidget {
     final c = color ?? p.accent;
     final enabled = onTap != null;
     final fg = filled ? Colors.white : c;
-    return AnimatedOpacity(
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      excludeSemantics: true,
+      child: AnimatedOpacity(
       duration: const Duration(milliseconds: 150),
       opacity: enabled ? 1 : 0.4,
       child: PressableScale(
@@ -76,7 +81,7 @@ class AppleButton extends StatelessWidget {
           ]),
         ),
       ),
-    );
+    ));
   }
 }
 

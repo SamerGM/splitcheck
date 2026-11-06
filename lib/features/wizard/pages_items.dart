@@ -191,7 +191,7 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
 
     String hint() {
       if (price == null || _who.isEmpty) return s.fillItem;
-      if (everyone && people.length > 1) return s.splitBetween(s.everyoneLower, fmtMoney(ref, price / people.length));
+      if (everyone && people.length > 1) return s.splitBetween(s.everyoneLower.toLowerCase(), fmtMoney(ref, price / people.length));
       if (_who.length == 1) return '→ ${people.firstWhere((x) => _who.contains(x.id)).name}';
       final names = [for (final x in people) if (_who.contains(x.id)) x.name].join(s.isAr ? '، ' : ', ');
       return s.splitBetween(names, fmtMoney(ref, price / _who.length));
@@ -200,7 +200,7 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
     return WizardPage(
       eyebrow: s.itemXofY(widget.index + 1, w.itemTotal < widget.index + 1 ? widget.index + 1 : w.itemTotal),
       title: s.whatOrdered,
-      primaryLabel: single ? s.saveBtn : s.nextItem,
+      primaryLabel: single ? s.saveBtn : (widget.index + 1 >= w.itemTotal ? s.continueBtn : s.nextItem),
       onPrimary: !_valid ? null : () => ctl.saveItem(widget.index,
           name: _name.text, price: _priceValue!, whoIds: [for (final x in people) if (_who.contains(x.id)) x.id]),
       children: [

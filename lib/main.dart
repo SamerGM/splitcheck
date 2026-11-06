@@ -141,7 +141,7 @@ class _Splash extends ConsumerWidget {
           AnimatedOpacity(
             opacity: showText ? 1 : 0,
             duration: const Duration(milliseconds: 350),
-            child: Text(s.slogan, style: TextStyle(fontSize: 17, color: p.secondary)),
+            child: Text(s.slogan, textAlign: TextAlign.center, style: TextStyle(fontSize: 17, color: p.secondary, height: 1.35)),
           ),
         ]),
       ),
