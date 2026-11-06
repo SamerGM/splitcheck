@@ -13,6 +13,17 @@ const Map<String, (String, String, int)> kCurrencies = {
   'EGP': ('EGP', 'ج.م', 2),
   'EUR': ('€', '€', 2),
   'GBP': ('£', '£', 2),
+  'LBP': ('LBP', 'ل.ل', 0),
+  'MAD': ('MAD', 'د.م', 2),
+  'TND': ('TND', 'د.ت', 3),
+  'DZD': ('DZD', 'د.ج', 2),
+  'IQD': ('IQD', 'د.ع', 0),
+  'LYD': ('LYD', 'د.ل', 3),
+  'TRY': ('₺', '₺', 2),
+  'CAD': ('CAD', 'CAD', 2),
+  'AUD': ('AUD', 'AUD', 2),
+  'INR': ('₹', '₹', 2),
+  'PKR': ('PKR', 'PKR', 0),
 };
 
 int currencyDecimals(String currency) => kCurrencies[currency]?.$3 ?? 2;
@@ -39,4 +50,15 @@ const Map<String, (String, String)> kCurrencyNames = {
   'USD': ('US Dollar', 'دولار أمريكي'),
   'EUR': ('Euro', 'يورو'),
   'GBP': ('British Pound', 'جنيه إسترليني'),
+  'LBP': ('Lebanese Pound', 'ليرة لبنانية'),
+  'MAD': ('Moroccan Dirham', 'درهم مغربي'),
+  'TND': ('Tunisian Dinar', 'دينار تونسي'),
+  'DZD': ('Algerian Dinar', 'دينار جزائري'),
+  'IQD': ('Iraqi Dinar', 'دينار عراقي'),
+  'LYD': ('Libyan Dinar', 'دينار ليبي'),
+  'TRY': ('Turkish Lira', 'ليرة تركية'),
+  'CAD': ('Canadian Dollar', 'دولار كندي'),
+  'AUD': ('Australian Dollar', 'دولار أسترالي'),
+  'INR': ('Indian Rupee', 'روبية هندية'),
+  'PKR': ('Pakistani Rupee', 'روبية باكستانية'),
 };

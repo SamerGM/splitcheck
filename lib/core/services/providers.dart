@@ -23,7 +23,7 @@ class _LocaleNotifier extends Notifier<VoiceLocale> {
 }
 
 class _StepNotifier extends Notifier<FlowStep> {
-  @override FlowStep build() => FlowStep.peopleCount;
+  @override FlowStep build() => FlowStep.currency;
   set value(FlowStep v) => state = v;
 }
 
@@ -85,4 +85,17 @@ final historyProvider = AsyncNotifierProvider<HistoryNotifier, List<Bill>>(
   HistoryNotifier.new,
 );
 
-enum FlowStep { peopleCount, people, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, delivery, discount, confirm, result, equalTotal }
+enum FlowStep { currency, people, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, delivery, discount, confirm, result, roundUp }
+
+/// Sheets the chat asks the screen to open.
+enum SheetRequest { country, people }
+
+class _SheetRequestNotifier extends Notifier<(SheetRequest, int)?> {
+  int _n = 0;
+  @override (SheetRequest, int)? build() => null;
+  void request(SheetRequest r) => state = (r, ++_n);
+}
+
+/// Each new value means "open this sheet now" (the counter makes repeats fire).
+final sheetRequestProvider =
+    NotifierProvider<_SheetRequestNotifier, (SheetRequest, int)?>(_SheetRequestNotifier.new);

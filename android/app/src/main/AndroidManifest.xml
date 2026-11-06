@@ -56,6 +56,11 @@
         <intent>
             <action android:name="android.intent.action.GET_CONTENT" />
         </intent>
+        <!-- Pick a name from contacts (system picker, no contacts permission) -->
+        <intent>
+            <action android:name="android.intent.action.PICK" />
+            <data android:mimeType="vnd.android.cursor.dir/contact" />
+        </intent>
     </queries>
 
 </manifest>

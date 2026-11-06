@@ -9,6 +9,7 @@ import '../../core/services/providers.dart';
 import '../../core/services/parser_service.dart';
 import '../../core/services/split_calculator.dart';
 import '../../core/services/settings_provider.dart';
+import '../../core/utils/countries.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/number_parser.dart';
 import '../../core/utils/strings.dart';
@@ -55,6 +56,9 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   // Place name (asked from the final check)
   bool _awaitingPlaceName = false;
+
+  // Group name (after "Save group")
+  bool _awaitingGroupName = false;
 
   // Undo
   final List<_Snapshot> _undo = [];
@@ -135,6 +139,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     'editingIndex': _editingIndex, 'editSubStep': _editSubStep,
     'returnToConfirm': _returnToConfirm, 'discountMode': _discountMode,
     'awaitingPlaceName': _awaitingPlaceName,
+    'awaitingGroupName': _awaitingGroupName,
   };
 
   void _restoreFields(Map<String, Object?> f) {
@@ -150,6 +155,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _returnToConfirm   = f['returnToConfirm'] as bool;
     _discountMode      = f['discountMode'] as String;
     _awaitingPlaceName = f['awaitingPlaceName'] as bool;
+    _awaitingGroupName = f['awaitingGroupName'] as bool;
   }
 
   /// Remember the current state so the next answer can be undone.
@@ -202,9 +208,10 @@ class FlowController extends Notifier<List<ChatMessage>> {
     if (text.trim().isEmpty) return;
     checkpoint();
     _addUser(text);
+    if (_awaitingGroupName) { await _saveGroupNamed(text); return; }
 
     switch (_step) {
-      case FlowStep.peopleCount: await _handlePeopleCount(text); break;
+      case FlowStep.currency: await _bot(_s.tapAButton, ms: 200); break;
       case FlowStep.people:      await _handlePeople(text);      break;
       case FlowStep.itemCount:   await _handleItemCount(text);   break;
       case FlowStep.itemName:    await _handleItemName(text);    break;
@@ -222,48 +229,112 @@ class FlowController extends Notifier<List<ChatMessage>> {
       case FlowStep.discount: await _handleDiscount(text); break;
       case FlowStep.confirm:  await _handleConfirm(text);  break;
       case FlowStep.result:   await _bot(_s.billDone, ms: 200); break;
-      case FlowStep.equalTotal: await _handleEqualTotal(text); break;
+      case FlowStep.roundUp:  await _handleRoundUp(text);  break;
     }
+  }
+
+  // ═══════════════════ STEP 0 — COUNTRY / CURRENCY ═════════════════════════
+
+  void _requestSheet(SheetRequest r) => ref.read(sheetRequestProvider.notifier).request(r);
+
+  Future<void> _start() async {
+    final s = _s;
+    if (!ref.read(currencyProvider.notifier).hasDefault) {
+      await _askCountry(greeting: true);
+    } else {
+      await _bot(s.welcome, ms: 300);
+      await _askPeople();
+    }
+  }
+
+  Future<void> _askCountry({bool greeting = false}) async {
+    _setStep(FlowStep.currency);
+    final s = _s;
+    await _bot(greeting ? '${s.welcome}\n\n${s.askCountry}' : s.askCountry, chips: [
+      QuickChip(label: s.chooseCountry, onTap: () async => _requestSheet(SheetRequest.country)),
+      QuickChip(label: s.skip, onTap: _askPeople),
+    ]);
+  }
+
+  /// The country sheet was closed without choosing — ask again.
+  Future<void> countryPickCancelled() async {
+    if (_step == FlowStep.currency) await _askCountry();
+  }
+
+  /// Called by the country sheet.
+  Future<void> countryChosen(Country c) async {
+    final s = _s;
+    ref.read(currencyProvider.notifier).use(c.currency, country: c.code);
+    _addUser('${c.flag} ${c.name(s.isAr)}');
+    await _bot('${s.currencySet(c.name(s.isAr), c.currency)}\n\n${s.makeDefault}', chips: [
+      QuickChip(label: s.yesSaveIt, onTap: () async {
+        await ref.read(currencyProvider.notifier).setDefault(c.currency, country: c.code);
+        await _bot(s.defaultSaved, ms: 250);
+        await _askPeople();
+      }),
+      QuickChip(label: s.justThisTime, onTap: _askPeople),
+    ], ms: 300);
   }
 
   // ═══════════════════ STEP 1 — PEOPLE ═════════════════════════════════════
 
-  Future<void> _start() async {
-    _setStep(FlowStep.peopleCount);
+  Future<void> _askPeople() async {
+    _setStep(FlowStep.people);
     final s = _s;
-    await _bot('${s.welcome}\n\n${s.howManyPeople}', chips: [
-      for (final n in [2, 3, 4, 5, 6])
-        QuickChip(label: s.fmtNum(n.toDouble(), decimals: 0), onTap: () => _setPeopleCount(n)),
+    final groups = ref.read(groupsProvider);
+    await _bot(s.askPeople, chips: [
+      for (final g in groups)
+        QuickChip(label: '👥 ${g.name}', onTap: () => _usePeople(g.members, fromGroup: true)),
+      QuickChip(label: s.addPeopleBtn, onTap: () async => _requestSheet(SheetRequest.people)),
+    ], ms: 300);
+    _requestSheet(SheetRequest.people); // open the people sheet straight away
+  }
+
+  /// Called by the people sheet. Empty names become "Person 1", "Person 2"…
+  Future<void> peopleFromSheet(List<String> rawNames, {String? saveAsGroup}) async {
+    checkpoint();
+    final s = _s;
+    final names = [
+      for (var i = 0; i < rawNames.length; i++)
+        rawNames[i].trim().isEmpty ? s.personN(i + 1) : rawNames[i].trim(),
+    ];
+    _addUser(names.join(s.isAr ? '، ' : ', '));
+    final group = saveAsGroup?.trim() ?? '';
+    if (group.isNotEmpty) {
+      await ref.read(groupsProvider.notifier).add(group, names);
+      await _bot(s.groupSaved(group), ms: 200);
+    }
+    await _usePeople(names, fromGroup: group.isNotEmpty, echo: false);
+  }
+
+  /// Puts these names on the bill (keeping IDs of people already there) and moves on.
+  Future<void> _usePeople(List<String> names, {bool fromGroup = false, bool echo = true}) async {
+    final unique = <String>[];
+    for (final n in names) {
+      if (!unique.any((u) => u.toLowerCase() == n.toLowerCase())) unique.add(n);
+    }
+    _assignPeople(unique);
+    await _confirmPeople(offerSaveGroup: !fromGroup);
+  }
+
+  void _assignPeople(List<String> unique) {
+    // Re-use the old ID (and colour) for a name that was already on the bill,
+    // so item assignments survive "Edit people".
+    final known = [..._previousPeople, ..._draftState.people];
+    _draft.setPeople([
+      for (var i = 0; i < unique.length; i++)
+        known.firstWhere(
+          (p) => p.name.toLowerCase() == unique[i].toLowerCase(),
+          orElse: () => Person(
+            id: _uuid.v4(),
+            name: unique[i],
+            color: kPersonColors[i % kPersonColors.length],
+          ),
+        ),
     ]);
   }
 
-  Future<void> _handlePeopleCount(String text) async {
-    final n = parseNumber(text)?.toInt();
-    if (n == null || n <= 0 || n > 50) {
-      await _bot(_s.pleaseEnterValidNumber, ms: 200);
-      return;
-    }
-    await _setPeopleCount(n);
-  }
-
-  Future<void> _setPeopleCount(int n) async {
-    _expectedPeople = n;
-    _setStep(FlowStep.people);
-    final groups = await _recentGroups();
-    // Groups with the same number of people first.
-    groups.sort((a, b) => (a.length == n ? 0 : 1).compareTo(b.length == n ? 0 : 1));
-    final s = _s;
-    await _bot(
-      '${s.peopleCountPrompt(n)}\n${s.namesExample}${groups.isEmpty ? '' : '\n\n${s.orPickRecent}'}',
-      chips: [
-        for (final g in groups)
-          QuickChip(label: g.join(s.isAr ? '، ' : ', '), onTap: () => _handlePeople(g.join(', '))),
-        QuickChip(label: s.skipNamesEqual, onTap: () => _skipNamesAndSplitEqually(n)),
-      ],
-      ms: 300,
-    );
-  }
-
+  /// Names typed straight into the chat ("Ahmed, Sara, Omar") still work.
   Future<void> _handlePeople(String text) async {
     final s = _s;
     final low = text.toLowerCase().trim();
@@ -291,27 +362,9 @@ class FlowController extends Notifier<List<ChatMessage>> {
     for (final n in [..._draftState.people.map((p) => p.name), ...names]) {
       if (!unique.any((u) => u.toLowerCase() == n.toLowerCase())) unique.add(n);
     }
+    _assignPeople(unique);
 
-    // Re-use the old ID (and colour) for a name that was already on the bill,
-    // so item assignments survive "Edit people".
-    final known = [..._previousPeople, ..._draftState.people];
-    _draft.setPeople([
-      for (var i = 0; i < unique.length; i++)
-        known.firstWhere(
-          (p) => p.name.toLowerCase() == unique[i].toLowerCase(),
-          orElse: () => Person(
-            id: _uuid.v4(),
-            name: unique[i],
-            color: kPersonColors[i % kPersonColors.length],
-          ),
-        ),
-    ]);
-
-    var msg = s.gotIt(unique.join(s.isAr ? '، ' : ', '));
-    if (_expectedPeople > 0 && unique.length != _expectedPeople) {
-      msg += '\n\n${s.countMismatch(_expectedPeople, unique.length)}';
-    }
-    await _bot('$msg\n\n${s.isCorrect}', chips: [
+    await _bot('${s.gotIt(unique.join(s.isAr ? '، ' : ', '))}\n\n${s.isCorrect}', chips: [
       QuickChip(label: s.yes, onTap: _confirmPeople),
       QuickChip(label: s.noReenter, onTap: () async {
         _draft.setPeople([]);
@@ -321,7 +374,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     ]);
   }
 
-  Future<void> _confirmPeople() async {
+  Future<void> _confirmPeople({bool offerSaveGroup = true}) async {
     if (_draftState.people.isEmpty) {
       await _bot(_s.typeNamesAgain, ms: 200);
       return;
@@ -333,55 +386,49 @@ class FlowController extends Notifier<List<ChatMessage>> {
         it.copyWith(personIds: it.personIds.where(ids.contains).toList()),
     ]);
     _previousPeople = const [];
-    _saveRecentGroup(_draftState.people.map((p) => p.name).toList());
     _expectedPeople = 0;
 
     await _bot(_s.peopleConfirmed, ms: 250);
     if (_returnToConfirm) {
       await _showFinalConfirm();
-    } else {
-      await _askItemCount();
+      return;
     }
+    // New set of real names → offer to save them as a group for next time.
+    final names = _draftState.people.map((p) => p.name).toList();
+    final allDefault = names.asMap().entries.every((e) => e.value == _s.personN(e.key + 1));
+    if (offerSaveGroup && !allDefault && names.length > 1 &&
+        !ref.read(groupsProvider.notifier).exists(names)) {
+      final s = _s;
+      await _bot(s.saveGroupQuestion(names.join(s.isAr ? '، ' : ', ')), chips: [
+        QuickChip(label: s.saveGroupBtn, onTap: () async {
+          _awaitingGroupName = true;
+          await _bot(s.askGroupName, ms: 200);
+        }),
+        QuickChip(label: s.noThanks, onTap: () => _askItemCount()),
+      ], ms: 300);
+      return;
+    }
+    await _askItemCount();
+  }
+
+  Future<void> _saveGroupNamed(String name) async {
+    _awaitingGroupName = false;
+    final names = _draftState.people.map((p) => p.name).toList();
+    await ref.read(groupsProvider.notifier).add(name.trim(), names);
+    await _bot(_s.groupSaved(name.trim()), ms: 200);
+    await _askItemCount();
   }
 
   // ═══════════════════ STEP 2 — ITEMS ══════════════════════════════════════
 
   Future<void> _askItemCount({bool more = false}) async {
     _setStep(FlowStep.itemCount);
-    await _bot(more ? _s.howManyMoreItems : '${_s.howManyItems}\n\n${_s.scanTip}',
-        chips: more ? null : [QuickChip(label: _s.splitTotalEqually, onTap: _askEqualTotal)],
-        ms: 300);
-  }
-
-  // ═══════════════════ QUICK EQUAL SPLIT ═══════════════════════════════════
-
-  /// "Skip names": Person 1 … Person n, then just the total.
-  Future<void> _skipNamesAndSplitEqually(int n) async {
-    _draft.setPeople([
-      for (var i = 0; i < n; i++)
-        Person(id: _uuid.v4(), name: _s.personN(i + 1), color: kPersonColors[i % kPersonColors.length]),
-    ]);
-    _expectedPeople = 0;
-    await _askEqualTotal();
-  }
-
-  Future<void> _askEqualTotal() async {
-    _setStep(FlowStep.equalTotal);
-    await _bot(_s.askEqualTotal, ms: 250);
-  }
-
-  Future<void> _handleEqualTotal(String text) async {
-    final total = parseNumber(text);
-    if (total == null || total <= 0) {
-      await _bot(_s.pleaseEnterValidNumber, ms: 200);
-      return;
-    }
-    final n = _draftState.people.length;
-    _draft.setItems([BillItem(id: _uuid.v4(), name: _s.billTotalItem, price: total)]);
-    // The total already includes tax and service.
-    _draft.setExtras(_draftState.extras.copyWith(vatPct: 0, servicePct: 0));
-    await _bot(_s.equalTotalSet(_fmt(total), n, _fmt(total / n)), ms: 250);
-    await _showFinalConfirm();
+    final s = _s;
+    await _bot(more ? s.howManyMoreItems : '${s.howManyItems}\n\n${s.scanTip}', chips: [
+      for (final n in const [1, 2, 3, 4, 5, 6, 7, 8, 10])
+        QuickChip(label: s.n(n), onTap: () => _setItemCount(n)),
+      QuickChip(label: s.custom, onTap: () => _bot(s.typeItemCount, ms: 200)),
+    ], ms: 300);
   }
 
   Future<void> _handleItemCount(String text) async {
@@ -390,6 +437,10 @@ class FlowController extends Notifier<List<ChatMessage>> {
       await _bot(_s.pleaseEnterValidNumber, ms: 200);
       return;
     }
+    await _setItemCount(n);
+  }
+
+  Future<void> _setItemCount(int n) async {
     _currentIndex = _draftState.items.length;
     _totalItems   = _currentIndex + n;
     await _askItemName();
@@ -397,7 +448,22 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> _askItemName() async {
     _setStep(FlowStep.itemName);
-    await _bot(_s.itemNamePrompt(_currentIndex + 1, _totalItems), ms: 300);
+    final s = _s;
+    // Common dishes as one-tap names (hide ones already on the bill).
+    final suggestions = [
+      for (final label in s.itemSuggestions)
+        if (!_nameTaken(_suggestionName(label))) label,
+    ];
+    await _bot(s.itemNamePrompt(_currentIndex + 1, _totalItems), chips: [
+      for (final label in suggestions)
+        QuickChip(label: label, onTap: () => _handleItemName(_suggestionName(label))),
+    ], ms: 300);
+  }
+
+  /// "🍕 Pizza" → "Pizza"
+  String _suggestionName(String label) {
+    final i = label.indexOf(' ');
+    return i < 0 ? label : label.substring(i + 1);
   }
 
   bool _nameTaken(String name, {int exceptIndex = -1}) {
@@ -868,6 +934,30 @@ class FlowController extends Notifier<List<ChatMessage>> {
     } else {
       await _bot(s.noDiscountApplied, ms: 250);
     }
+    if (_returnToConfirm) { await _showFinalConfirm(); } else { await _askRoundUp(); }
+  }
+
+  // ═══════════════════ ROUND EACH SHARE UP ═════════════════════════════════
+
+  Future<void> _askRoundUp() async {
+    _setStep(FlowStep.roundUp);
+    final s = _s;
+    await _bot(s.roundUpQuestion, chips: [
+      QuickChip(label: s.roundNo, onTap: () => _applyRoundUp(0)),
+      for (final v in const [1, 5, 10])
+        QuickChip(label: s.roundTo(v), onTap: () => _applyRoundUp(v)),
+    ], ms: 300);
+  }
+
+  Future<void> _handleRoundUp(String text) async {
+    final n = parseNumber(text);
+    if (n == null || n < 0) { await _bot(_s.tapAButton, ms: 200); return; }
+    await _applyRoundUp(n.round());
+  }
+
+  Future<void> _applyRoundUp(int v) async {
+    _draft.setExtras(_draftState.extras.copyWith(roundUpTo: v.toDouble()));
+    await _bot(v == 0 ? _s.noRounding : _s.roundApplied(v), ms: 250);
     await _showFinalConfirm();
   }
 
@@ -890,6 +980,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       if (ext.servicePct > 0) '${s.serviceLabel} ${_pct(ext.servicePct)}: ${_fmt(ext.serviceAmount(sub))}',
       if (ext.tipPct > 0)     '${s.tipLabel} ${_pct(ext.tipPct)}: ${_fmt(ext.tipAmount(sub))}',
       if (ext.deliveryFee > 0) '${s.deliveryLabel}: ${_fmt(ext.deliveryFee)}',
+      if (ext.roundUpTo > 0) '${s.roundingMenu}: ${s.roundTo(ext.roundUpTo.round())}',
       '',
       '${s.grandTotal}: ${_fmt(ext.grandTotal(sub))}',
     ].join('\n');
@@ -932,11 +1023,11 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final s = _s;
     await _bot(s.whatToEdit, chips: [
       QuickChip(label: s.editPeople, onTap: () async {
+        // Re-open the people sheet with everyone already filled in.
         _previousPeople = _draftState.people;
         _expectedPeople = 0;
-        _draft.setPeople([]);
         _setStep(FlowStep.people);
-        await _bot(s.reenterPeople(_previousPeople.map((p) => p.name).join(', ')), ms: 200);
+        _requestSheet(SheetRequest.people);
       }),
       QuickChip(label: s.editItems, onTap: _showItemEditList),
       QuickChip(label: s.editNumberOfItems, onTap: () async {
@@ -949,6 +1040,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       QuickChip(label: s.tipLabel, onTap: _askTip),
       QuickChip(label: s.deliveryLabel, onTap: _askDelivery),
       QuickChip(label: s.discountLabel, onTap: _askDiscount),
+      QuickChip(label: s.roundingMenu, onTap: _askRoundUp),
       QuickChip(label: s.placeLabel, onTap: () async {
         _setStep(FlowStep.confirm);
         _awaitingPlaceName = true;
@@ -962,7 +1054,6 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   void _calcAndShow() {
     _setStep(FlowStep.result);
-    _draft.setExtras(_draftState.extras.copyWith(roundUpTo: ref.read(roundUpProvider)));
     final bill   = _draftState.toBill(_curr);
     final result = SplitCalculator.calculate(bill);
     ref.read(splitResultProvider.notifier).value = result;
@@ -981,28 +1072,13 @@ class FlowController extends Notifier<List<ChatMessage>> {
     } catch (_) {/* history is best-effort */}
   }
 
-  Future<List<List<String>>> _recentGroups() async {
-    try {
-      final svc = ref.read(settingsServiceProvider);
-      await svc.init();
-      return svc.loadRecentGroups();
-    } catch (_) { return []; }
-  }
-
-  Future<void> _saveRecentGroup(List<String> names) async {
-    try {
-      final svc = ref.read(settingsServiceProvider);
-      await svc.init();
-      await svc.saveRecentGroup(names);
-    } catch (_) {}
-  }
-
   Future<void> reset() async {
     _expectedPeople = 0;
     _previousPeople = const [];
     _pendingName    = '';
     _pendingPrice   = 0;
     _pendingQty     = 1;
+    _awaitingGroupName = false;
     _awaitingPlaceName = false;
     _totalItems     = 0;
     _currentIndex   = 0;

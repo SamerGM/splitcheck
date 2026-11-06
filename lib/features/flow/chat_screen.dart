@@ -17,7 +17,9 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
 import '../history/history_screen.dart';
 import '../result/result_card.dart';
+import '../settings/country_picker.dart';
 import '../settings/settings_sheet.dart';
+import 'people_sheet.dart';
 import 'chat_message.dart';
 import 'flow_controller.dart';
 
@@ -195,6 +197,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  bool _sheetOpen = false;
+
+  Future<void> _openCountryPicker() async {
+    if (_sheetOpen) return;
+    _sheetOpen = true;
+    final ctl = ref.read(chatProvider.notifier);
+    final c = await showCountryPicker(context, selectedCode: ref.read(countryProvider));
+    _sheetOpen = false;
+    if (c == null) { await ctl.countryPickCancelled(); } else { await ctl.countryChosen(c); }
+    _scrollToBottom();
+  }
+
+  Future<void> _openPeopleSheet() async {
+    if (_sheetOpen) return;
+    _sheetOpen = true;
+    final initial = ref.read(billDraftProvider).people.map((p) => p.name).toList();
+    final r = await showPeopleSheet(context, initial: initial);
+    _sheetOpen = false;
+    if (r != null) {
+      await ref.read(chatProvider.notifier).peopleFromSheet(r.names, saveAsGroup: r.groupName);
+      _scrollToBottom();
+    }
+  }
+
   Future<void> _confirmRestart() async {
     final s = ref.read(stringsProvider);
     final ok = await showCupertinoDialog<bool>(
@@ -234,6 +260,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (next == FlowStep.itemWho) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _openPeoplePicker());
       }
+    });
+    // The chat asks for the country list or the people sheet.
+    ref.listen(sheetRequestProvider, (_, req) {
+      if (req == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (req.$1 == SheetRequest.country) _openCountryPicker();
+        if (req.$1 == SheetRequest.people) _openPeopleSheet();
+      });
     });
 
     final showScan = step == FlowStep.itemCount || step == FlowStep.itemName ||
@@ -288,6 +322,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   height: navHeight,
                   progress: _progressFor(step),
                   title: s.appName,
+                  restartLabel: s.startOver,
                   onRestart: _confirmRestart,
                   onSettings: () => showSettingsSheet(context),
                   onHistory: () => Navigator.of(context).push(
@@ -307,7 +342,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   static double _progressFor(FlowStep step) => switch (step) {
-    FlowStep.peopleCount => 0.05,
+    FlowStep.currency    => 0.05,
     FlowStep.people      => 0.14,
     FlowStep.itemCount   => 0.25,
     FlowStep.itemName || FlowStep.itemPrice || FlowStep.itemWho => 0.40,
@@ -316,10 +351,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     FlowStep.service     => 0.73,
     FlowStep.tip         => 0.79,
     FlowStep.delivery    => 0.84,
-    FlowStep.discount    => 0.89,
+    FlowStep.discount    => 0.87,
+    FlowStep.roundUp     => 0.91,
     FlowStep.confirm || FlowStep.editMenu => 0.95,
     FlowStep.result      => 1.0,
-    FlowStep.equalTotal  => 0.55,
   };
 }
 
@@ -327,9 +362,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
 class _NavBar extends StatelessWidget {
   final double height, progress;
-  final String title;
+  final String title, restartLabel;
   final VoidCallback onRestart, onSettings, onHistory;
   const _NavBar({required this.height, required this.progress, required this.title,
+      required this.restartLabel,
       required this.onRestart, required this.onSettings, required this.onHistory});
 
   @override
@@ -362,7 +398,7 @@ class _NavBar extends StatelessWidget {
               CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 onPressed: onRestart,
-                child: Icon(CupertinoIcons.arrow_counterclockwise, color: p.accent, size: 22),
+                child: Text(restartLabel, style: TextStyle(fontSize: 17, color: p.accent, letterSpacing: -0.4)),
               ),
               const Spacer(),
               CupertinoButton(
@@ -373,7 +409,7 @@ class _NavBar extends StatelessWidget {
               CupertinoButton(
                 padding: const EdgeInsetsDirectional.only(start: 6, end: 14),
                 onPressed: onSettings,
-                child: Icon(CupertinoIcons.ellipsis_circle, color: p.accent, size: 24),
+                child: Icon(CupertinoIcons.gear_alt, color: p.accent, size: 24),
               ),
             ]),
             // Thin progress line along the bottom edge, like Safari's loader.

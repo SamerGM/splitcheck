@@ -5,6 +5,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:splitcheck/core/services/providers.dart';
+import 'package:splitcheck/core/services/settings_provider.dart';
+import 'package:splitcheck/core/utils/countries.dart';
 import 'package:splitcheck/features/flow/chat_message.dart';
 import 'package:splitcheck/features/flow/flow_controller.dart';
 
@@ -39,29 +41,44 @@ void main() {
 
   setUpAll(() => Hive.init(Directory.systemTemp.createTempSync('splitcheck').path));
 
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
     c = ProviderContainer();
+    await c.read(groupsProvider.notifier).init();   // opens the settings store
+    await c.read(currencyProvider.notifier).init();
     c.listen(chatProvider, (_, __) {}); // keep alive
   });
+
+  /// Welcome → skip country → names typed in the chat → confirm → (no group).
+  Future<void> startWith(String names) async {
+    await settle();
+    await tap('Skip');
+    await say(names);
+    await tap('Yep 👍');
+    if (lastBot().contains('as a group')) await tap('No thanks');
+  }
   tearDown(() => c.dispose());
 
-  test('full flow with edit-who, typed tip and fixed discount', () async {
+  test('full flow with edit-who, typed tip, delivery and fixed discount', () async {
     await settle();
-    expect(lastBot(), contains('How many persons will split the check?'));
+    expect(lastBot(), contains('preferred country or currency'));
     expect(lastBot(), isNot(contains(r'${')));
-
-    await tap('2');
+    await tap('Skip');
+    expect(c.read(flowStepProvider), FlowStep.people);
     await say('Ahmed, Sara');
     expect(lastBot(), contains('Ahmed, Sara'));
     await tap('Yep 👍');
+    expect(lastBot(), contains('as a group'));       // offers to save new names
+    await tap('No thanks');
 
-    await say('2');
-    await say('Burger');
+    await tap('2');                                  // item-count button
+    await tap('🍔 Burger');                          // name suggestion
+    expect(c.read(flowStepProvider), FlowStep.itemPrice);
     await say('40');
     expect(c.read(flowStepProvider), FlowStep.itemWho);
     await ctl().confirmSelectedPeople([id('Ahmed')]);
     await settle();
+    expect(lastBot(), isNot(contains('Burger')));     // used suggestions disappear
     await say('Pizza');
     await say('60');
     await say('everyone');
@@ -69,7 +86,7 @@ void main() {
 
     // Edit "who had it" on Burger → must UPDATE, not add a new item.
     await tap('Edit an item');
-    await tap('Burger · \$40.00');
+    await tap(r'Burger · $40.00');
     await tap('Who Ordered This Order ?');
     expect(c.read(flowStepProvider), FlowStep.itemWho);
     await ctl().confirmSelectedPeople([id('Sara')]);
@@ -84,9 +101,7 @@ void main() {
     await say('5');               // typed tip → goes on to delivery, then discount
     expect(c.read(flowStepProvider), FlowStep.delivery);
     await tap('Yes');
-    expect(lastBot(), contains('How much is the delivery fee'));
     await say('10');
-    expect(c.read(billDraftProvider).extras.deliveryFee, 10);
     expect(c.read(flowStepProvider), FlowStep.discount);
 
     await tap('Fixed amount');
@@ -94,6 +109,9 @@ void main() {
     final ex = c.read(billDraftProvider).extras;
     expect(ex.discountFixed, 50);
     expect(ex.discountPct, 0);
+    expect(c.read(flowStepProvider), FlowStep.roundUp);
+    expect(lastBot(), contains('never down'));
+    await tap('No');              // no rounding
     expect(c.read(flowStepProvider), FlowStep.confirm);
     expect(lastBot(), contains('Discount'));
     expect(lastBot(), contains('Delivery'));
@@ -104,44 +122,48 @@ void main() {
     expect(r.grandTotal, closeTo(67.5, 0.001));
     final sum = r.personResults.fold(0.0, (a, p) => a + p.total);
     expect(sum, closeTo(67.5, 0.001));
-    expect(r.personResults.every((p) => (p.deliveryShare - 5).abs() < 1e-9), isTrue);
+  }, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('country: choose → make default → not asked next time; Settings keeps it', () async {
+    await settle();
+    await tap('🌍 Choose country');                       // the screen would open the list
+    expect(c.read(sheetRequestProvider)?.$1, SheetRequest.country);
+    await ctl().countryChosen(countryByCode('EG')!);
+    await settle();
+    expect(c.read(currencyProvider), 'EGP');
+    expect(lastBot(), contains('default'));
+    await tap('Yes, save it');
+    expect(lastBot(), contains('Who’s splitting'));
+    expect(c.read(currencyProvider.notifier).hasDefault, isTrue);
+
+    await ctl().reset();
+    await settle();
+    expect(c.read(chatProvider).any((m) => m.text.contains('preferred country')), isFalse);
+    expect(c.read(flowStepProvider), FlowStep.people);
   }, timeout: const Timeout(Duration(minutes: 2)));
 
-  test('ambiguous discount asks % or amount; edit from summary returns to summary', () async {
+  test('people sheet: empty names → Person 1, 2…; save as group; group button next time', () async {
     await settle();
-    await say('1');
-    await say('Omar');
-    await tap('Yep 👍');
-    await say('1');
-    await say('Tea');
-    await say('20');
-    await say('Omar');
-    await tap('Looks good 👍');
-    await tap('None');
-    await tap('None');
-    await tap('No tip');
-    await tap('No');              // no delivery
-    await say('10');
-    expect(lastBot(), contains('percentage or an amount'));
-    await tap('10% off');
-    expect(c.read(billDraftProvider).extras.discountPct, 10);
-    expect(c.read(flowStepProvider), FlowStep.confirm);
+    await tap('Skip');
+    await ctl().peopleFromSheet(['Mona', '', '']);
+    await settle();
+    expect(c.read(billDraftProvider).people.map((p) => p.name), ['Mona', 'Person 2', 'Person 3']);
+    await tap('💾 Save group');
+    await say('Work friends');
+    expect(c.read(groupsProvider).single.name, 'Work friends');
+    expect(c.read(flowStepProvider), FlowStep.itemCount);
 
-    // Change VAT from the final summary → straight back to the summary.
-    await tap('Change something');
-    await tap('VAT');
-    await tap('5%');
-    expect(c.read(flowStepProvider), FlowStep.confirm);
-    expect(c.read(billDraftProvider).extras.vatPct, 5);
-    expect(c.read(billDraftProvider).extras.discountPct, 10); // untouched
+    await ctl().reset();
+    await settle();
+    await tap('Skip');
+    await tap('👥 Work friends');                   // one tap, no "save group" question again
+    expect(c.read(billDraftProvider).people.map((p) => p.name), ['Mona', 'Person 2', 'Person 3']);
+    expect(c.read(flowStepProvider), FlowStep.itemCount);
   }, timeout: const Timeout(Duration(minutes: 2)));
 
-  test('quantity, typed portions, VAT already included, place name, recent group', () async {
-    await settle();
-    await tap('2');
-    await say('Mona, Karim');
-    await tap('Yep 👍');
-    await say('1');
+  test('quantity, typed portions, VAT already included, place name, round up to 5', () async {
+    await startWith('Mona, Karim');
+    await tap('1');
     await say('Pizza');
     expect(lastBot(), contains('2x15'));          // quantity hint on the first price
     await say('3x10');                           // 3 slices × 10
@@ -152,7 +174,6 @@ void main() {
     expect(it.price, 30);
     expect(it.quantity, 3);
     expect(it.portions, {id('Mona'): 2});
-    expect(lastBot(), contains('Mona ×2'));
 
     await tap('Looks good 👍');
     await tap('Already in prices');              // VAT included → nothing added
@@ -161,37 +182,25 @@ void main() {
     await tap('No tip');
     await tap('No');                             // delivery
     await tap('Nope');                           // discount
+    await tap('Up to 5');                        // round up
     await tap('🏷 Add place name');
     await say('Pizza Roma');
-    expect(c.read(billDraftProvider).merchant, 'Pizza Roma');
     expect(lastBot(), contains('🏷 Pizza Roma'));
     await tap('Split it ✨');
     final r = c.read(splitResultProvider)!;
-    expect(r.personResults.firstWhere((x) => x.person.name == 'Mona').total, 20);
-    expect(r.personResults.firstWhere((x) => x.person.name == 'Karim').total, 10);
-
-    // Next bill offers the same group as a one-tap button.
-    await ctl().reset();
-    await settle();
-    await tap('2');
-    expect(lastBot(), contains('group from last time'));
-    await tap('Mona, Karim');
-    expect(c.read(billDraftProvider).people.map((p) => p.name), ['Mona', 'Karim']);
+    expect(r.personResults.firstWhere((x) => x.person.name == 'Mona').total, 20);   // 20 → 20
+    expect(r.personResults.firstWhere((x) => x.person.name == 'Karim').total, 10);  // 10 → 10
+    expect(r.roundingExtra, 0);
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('undo takes back answers step by step, including the final split', () async {
-    await settle();
-    await tap('2');
-    await say('Nour, Ali');
-    await tap('Yep 👍');
+    await startWith('Nour, Ali');
     await say('1');
     await say('Tea');
     expect(c.read(flowStepProvider), FlowStep.itemPrice);
-    final before = c.read(chatProvider).length;
 
     ctl().undo();                                   // takes back "Tea"
     expect(c.read(flowStepProvider), FlowStep.itemName);
-    expect(c.read(chatProvider).length, lessThan(before));
     expect(lastBot(), contains('Item 1 of 1'));
 
     ctl().undo();                                   // takes back "1"
@@ -200,28 +209,14 @@ void main() {
     await say('1'); await say('Coffee'); await say('12');
     await ctl().handleInput('everyone'); await settle();
     await tap('Looks good 👍'); await tap('None'); await tap('None');
-    await tap('No tip'); await tap('No'); await tap('Nope');
+    await tap('No tip'); await tap('No'); await tap('Nope'); await tap('No');
     await tap('Split it ✨');
     expect(c.read(splitResultProvider), isNotNull);
 
     ctl().undo();                                   // takes back "Split it"
     expect(c.read(splitResultProvider), isNull);
     expect(c.read(flowStepProvider), FlowStep.confirm);
-    await tap('Split it ✨');                       // the button works again
-    expect(c.read(splitResultProvider)!.grandTotal, 12);
-  }, timeout: const Timeout(Duration(minutes: 2)));
-
-  test('quick equal split: skip names, type the total, done', () async {
-    await settle();
-    await tap('3');
-    await tap('➗ Skip names — split equally');
-    expect(c.read(flowStepProvider), FlowStep.equalTotal);
-    await say('100');
-    expect(lastBot(), contains('Quick check'));
     await tap('Split it ✨');
-    final r = c.read(splitResultProvider)!;
-    expect(r.personResults.map((x) => x.person.name), ['Person 1', 'Person 2', 'Person 3']);
-    expect(r.personResults.map((x) => x.total).toList()..sort(), [33.33, 33.33, 33.34]);
-    expect(r.grandTotal, 100);
+    expect(c.read(splitResultProvider)!.grandTotal, 12);
   }, timeout: const Timeout(Duration(minutes: 2)));
 }

@@ -1,12 +1,14 @@
 // lib/main.dart
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'package:flutter_animate/flutter_animate.dart';
+
 import 'shared/theme/app_theme.dart';
+import 'shared/widgets/apple_widgets.dart';
 import 'core/services/providers.dart';
 import 'core/services/settings_provider.dart';
 import 'features/flow/chat_screen.dart';
@@ -81,21 +83,67 @@ class _AppInitState extends ConsumerState<_AppInit> {
   }
 
   Future<void> _load() async {
+    // The welcome screen stays up for ~1.8 s (or until settings load, if slower).
+    final minSplash = Future.delayed(const Duration(milliseconds: 1800));
     await ref.read(themeProvider.notifier).init();
     await ref.read(languageProvider.notifier).init();
     await ref.read(currencyProvider.notifier).init();
-    await ref.read(roundUpProvider.notifier).init();
+    await ref.read(myNameProvider.notifier).init();
+    await ref.read(groupsProvider.notifier).init();
     // Voice input starts in the saved app language.
     ref.read(voiceLocaleProvider.notifier).value =
         voiceLocaleFor(ref.read(languageProvider));
+    if (mounted) setState(() => _loaded = true); // shows the slogan in the saved language
+    await minSplash;
     if (mounted) setState(() => _ready = true);
   }
 
+  bool _loaded = false;
+
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {
-      return const Scaffold(body: Center(child: CupertinoActivityIndicator(radius: 14)));
-    }
-    return const ChatScreen();
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 450),
+      child: _ready ? const ChatScreen() : _Splash(showText: _loaded),
+    );
+  }
+}
+
+/// Welcome screen: app icon, name and slogan.
+class _Splash extends ConsumerWidget {
+  final bool showText;
+  const _Splash({required this.showText});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = Palette.of(context);
+    final s = ref.watch(stringsProvider);
+    return Scaffold(
+      backgroundColor: p.bg,
+      body: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(27),
+              boxShadow: [BoxShadow(
+                color: const Color(0xFF0A5BDB).withValues(alpha: 0.30),
+                blurRadius: 30, offset: const Offset(0, 12))],
+            ),
+            child: const AppGlyph(size: 120),
+          ).animate().scale(begin: const Offset(.85, .85), duration: 500.ms, curve: Curves.easeOutBack)
+              .fadeIn(duration: 300.ms),
+          const SizedBox(height: 26),
+          Text(s.appName, style: TextStyle(
+            fontSize: 34, fontWeight: FontWeight.w700, letterSpacing: -1, color: p.label))
+              .animate().fadeIn(delay: 200.ms, duration: 400.ms).moveY(begin: 8, end: 0),
+          const SizedBox(height: 8),
+          AnimatedOpacity(
+            opacity: showText ? 1 : 0,
+            duration: const Duration(milliseconds: 350),
+            child: Text(s.slogan, style: TextStyle(fontSize: 17, color: p.secondary)),
+          ),
+        ]),
+      ),
+    );
   }
 }

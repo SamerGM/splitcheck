@@ -181,15 +181,64 @@ class S {
   String get today => _t('Today', 'النهارده');
   String get yesterday => _t('Yesterday', 'امبارح');
 
-  // ── Undo & quick equal split ───────────────────────────────────────────────
+  // ── Undo ───────────────────────────────────────────────────────────────────
   String get undo => _t('Undo', 'الرجوع');
-  String get skipNamesEqual => _t('➗ Skip names — split equally', '➗ بدون أسماء — قسّم بالتساوي');
-  String get splitTotalEqually => _t('➗ Just split the total equally', '➗ قسّم الإجمالي بالتساوي');
-  String get askEqualTotal => _t('What’s the bill total? (including tax and service)', 'إجمالي الفاتورة كام؟ (شامل الضريبة والخدمة)');
-  String equalTotalSet(String total, int n, String each) => _t(
-      'Total $total ÷ $n ≈ $each each', 'الإجمالي $total ÷ ${toArabicDigits('$n')} ≈ $each لكل شخص');
-  String get billTotalItem => _t('Bill total', 'إجمالي الفاتورة');
   String personN(int i) => _t('Person $i', 'شخص ${toArabicDigits('$i')}');
+
+  // ── Welcome screen ─────────────────────────────────────────────────────────
+  String get slogan => _t('Split the bill, not the fun.', 'قسّم الفاتورة… مش اللمة');
+
+  // ── Country / currency ─────────────────────────────────────────────────────
+  String get askCountry => _t('Do you have a preferred country or currency?', 'عندك دولة أو عملة مفضلة؟');
+  String get chooseCountry => _t('🌍 Choose country', '🌍 اختار الدولة');
+  String get skip => _t('Skip', 'تخطي');
+  String get countryCurrency => _t('Country & currency', 'الدولة والعملة');
+  String get search => _t('Search', 'بحث');
+  String currencySet(String country, String code) => _t('Currency: $country · $code ✓', 'العملة: $country · $code ✓');
+  String get makeDefault => _t('Make it your default for next time?', 'تخليها الافتراضية للمرات الجاية؟');
+  String get yesSaveIt => _t('Yes, save it', 'أيوه، احفظها');
+  String get justThisTime => _t('Just this time', 'المرة دي بس');
+  String get defaultSaved => _t('Saved as default ✓ You can change it anytime in Settings ⚙️', 'اتحفظت كافتراضية ✓ تقدر تغيّرها في أي وقت من الإعدادات ⚙️');
+
+  // ── People sheet ───────────────────────────────────────────────────────────
+  String get askPeople => _t(
+      'Who’s splitting the bill? Add the names — or leave them empty for Person 1, Person 2…',
+      'مين هيقسم الفاتورة؟ اكتب الأسماء — أو سيبها فاضية وهتبقى شخص ١، شخص ٢…');
+  String get addPeopleBtn => _t('👥 Add people', '👥 أضف الأشخاص');
+  String get peopleTitle => _t('Add people', 'إضافة الأشخاص');
+  String get numberOfPeople => _t('Number of people', 'عدد الأشخاص');
+  String get includeMe => _t('Include me', 'ضيفني');
+  String get yourName => _t('Your name', 'اسمك');
+  String get addPerson => _t('Add person', 'إضافة شخص');
+  String get yourGroups => _t('Your groups', 'مجموعاتك');
+  String get saveAsGroup => _t('Save as a group', 'احفظهم كمجموعة');
+  String get groupNameHint => _t('Group name (e.g. Work friends)', 'اسم المجموعة (مثلاً: أصحاب الشغل)');
+
+  // ── Friend groups (chat + settings) ────────────────────────────────────────
+  String saveGroupQuestion(String names) => _t('Save $names as a group for next time?', 'تحفظ $names كمجموعة للمرات الجاية؟');
+  String get saveGroupBtn => _t('💾 Save group', '💾 احفظ المجموعة');
+  String get noThanks => _t('No thanks', 'لا شكراً');
+  String get askGroupName => _t('What should I call this group?', 'تحب تسمي المجموعة إيه؟');
+  String groupSaved(String name) => _t('Group “$name” saved ✓', 'اتحفظت مجموعة «$name» ✓');
+  String get friendGroups => _t('Friend groups', 'مجموعات الأصحاب');
+  String get noGroupsYet => _t('No groups yet — they’re saved after you add people.', 'لسه مفيش مجموعات — بتتحفظ بعد ما تضيف الأشخاص.');
+
+  // ── Items ──────────────────────────────────────────────────────────────────
+  String get typeItemCount => _t('Type the number of items', 'اكتب عدد الأصناف');
+  /// Quick name suggestions for the item-name step.
+  List<String> get itemSuggestions => isAr
+      ? const ['🍕 بيتزا', '🍝 باستا', '🍔 برجر', '🍗 طبق فراخ', '🥩 طبق لحمة', '🥗 سلطة', '🍟 بطاطس', '🥤 مشروب', '☕ قهوة', '🧃 عصير', '🍰 حلو']
+      : const ['🍕 Pizza', '🍝 Pasta', '🍔 Burger', '🍗 Chicken plate', '🥩 Beef plate', '🥗 Salad', '🍟 Fries', '🥤 Drink', '☕ Coffee', '🧃 Juice', '🍰 Dessert'];
+
+  // ── Round each share up (asked in the chat) ────────────────────────────────
+  String get roundUpQuestion => _t(
+      'Round each share up? 💵\nEveryone pays a round number — easier for cash.\nExample: 37.72 → 38 (with 1) or 40 (with 5).\nIt only goes up, never down.',
+      'تقرّب نصيب كل واحد لفوق؟ 💵\nكل واحد يدفع رقم صحيح — أسهل في الكاش.\nمثال: ٣٧٫٧٢ ← ٣٨ (مع ١) أو ٤٠ (مع ٥).\nبيقرّب لفوق بس، عمره ما ينقص.');
+  String get roundNo => _t('No', 'لا');
+  String roundTo(int v) => _t('Up to $v', 'لأقرب ${toArabicDigits('$v')}');
+  String roundApplied(int v) => _t('Rounding each share up to $v ✓', 'هنقرّب نصيب كل واحد لأقرب ${toArabicDigits('$v')} ✓');
+  String get noRounding => _t('No rounding ✓', 'بدون تقريب ✓');
+  String get roundingMenu => _t('Rounding', 'التقريب');
 
   // ── Delivery ───────────────────────────────────────────────────────────────
   String get deliveryQuestion => _t('Any delivery fee? 🛵', 'في رسوم توصيل؟ 🛵');

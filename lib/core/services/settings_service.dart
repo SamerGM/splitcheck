@@ -1,5 +1,8 @@
 // lib/core/services/settings_service.dart
-// Saves theme and language choices across sessions.
+// Saves settings across sessions: theme, language, default currency,
+// your name and friend groups.
+
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,8 +11,9 @@ class SettingsService {
   static const _themeKey    = 'theme_mode';
   static const _languageKey = 'language';
   static const _currencyKey = 'currency';
-  static const _roundKey    = 'round_up_to';
-  static const _groupsKey   = 'recent_groups';
+  static const _countryKey  = 'country';
+  static const _myNameKey   = 'my_name';
+  static const _groupsKey   = 'friend_groups';
 
   late SharedPreferences _prefs;
 
@@ -48,31 +52,52 @@ class SettingsService {
     await _prefs.setString(_languageKey, lang);
   }
 
-  // ── Currency ───────────────────────────────────────────────────────────────
+  // ── Default country / currency ─────────────────────────────────────────────
+  // Saved only when the user says "make it my default".
 
-  String loadCurrency() => _prefs.getString(_currencyKey) ?? 'USD';
+  String? loadDefaultCurrency() => _prefs.getString(_currencyKey);
+  String? loadDefaultCountry()  => _prefs.getString(_countryKey);
 
-  Future<void> saveCurrency(String code) async {
-    await _prefs.setString(_currencyKey, code);
+  Future<void> saveDefault({required String country, required String currency}) async {
+    await _prefs.setString(_countryKey, country);
+    await _prefs.setString(_currencyKey, currency);
   }
 
-  // ── Round each share up (0 = off) ──────────────────────────────────────────
+  // ── My name (for "Include me") ─────────────────────────────────────────────
 
-  double loadRoundUpTo() => _prefs.getDouble(_roundKey) ?? 0;
-  Future<void> saveRoundUpTo(double v) async => _prefs.setDouble(_roundKey, v);
+  String loadMyName() => _prefs.getString(_myNameKey) ?? '';
+  Future<void> saveMyName(String name) async => _prefs.setString(_myNameKey, name.trim());
 
-  // ── Recent groups of people (most recent first) ────────────────────────────
+  // ── Friend groups ──────────────────────────────────────────────────────────
 
-  List<List<String>> loadRecentGroups() => (_prefs.getStringList(_groupsKey) ?? const [])
-      .map((g) => g.split('\u001f').where((n) => n.isNotEmpty).toList())
-      .where((g) => g.isNotEmpty)
-      .toList();
+  List<FriendGroup> loadGroups() {
+    final raw = _prefs.getString(_groupsKey);
+    if (raw == null) return [];
+    try {
+      return (jsonDecode(raw) as List)
+          .map((e) => FriendGroup.fromJson(e as Map<String, dynamic>))
+          .where((g) => g.members.isNotEmpty)
+          .toList();
+    } catch (_) { return []; }
+  }
 
-  Future<void> saveRecentGroup(List<String> names) async {
-    String key(List<String> g) => ([...g.map((n) => n.toLowerCase())]..sort()).join('|');
-    final groups = loadRecentGroups()..removeWhere((g) => key(g) == key(names));
-    groups.insert(0, names);
-    await _prefs.setStringList(
-        _groupsKey, groups.take(3).map((g) => g.join('\u001f')).toList());
+  Future<void> saveGroups(List<FriendGroup> groups) async =>
+      _prefs.setString(_groupsKey, jsonEncode(groups.map((g) => g.toJson()).toList()));
+}
+
+/// A saved group of friends, e.g. "Work friends": Ahmed, Sara, Omar.
+class FriendGroup {
+  final String name;
+  final List<String> members;
+  const FriendGroup(this.name, this.members);
+
+  Map<String, dynamic> toJson() => {'name': name, 'members': members};
+  factory FriendGroup.fromJson(Map<String, dynamic> j) =>
+      FriendGroup(j['name'] as String, List<String>.from(j['members'] as List));
+
+  /// Same people regardless of order / case.
+  bool sameMembers(List<String> names) {
+    String key(Iterable<String> l) => ([...l.map((n) => n.trim().toLowerCase())]..sort()).join('|');
+    return key(members) == key(names);
   }
 }
