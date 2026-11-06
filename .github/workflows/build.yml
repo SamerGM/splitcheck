@@ -1,4 +1,4 @@
-name: Build Android AAB
+name: Build Android AAB + APK
 
 on:
   push:
@@ -64,3 +64,18 @@ jobs:
         with:
           name: splitcheck-v1.0-build${{ github.run_number }}
           path: build/app/outputs/bundle/release/splitcheck-v1.0-build${{ github.run_number }}.aab
+
+      # Installable APK for testing on a phone (signed with the same release key)
+      - name: Build APK
+        run: flutter build apk --release --dart-define=GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
+
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/splitcheck-v1.0-build${{ github.run_number }}.apk
+          ls -lh build/app/outputs/flutter-apk/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v6
+        with:
+          name: splitcheck-v1.0-build${{ github.run_number }}-apk
+          path: build/app/outputs/flutter-apk/splitcheck-v1.0-build${{ github.run_number }}.apk
