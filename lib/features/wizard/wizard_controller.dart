@@ -17,7 +17,7 @@ import '../../core/utils/countries.dart';
 import '../../core/utils/strings.dart';
 
 enum WStep {
-  orderType, country, rates, peopleCount, names, itemsMethod, itemCount,
+  orderType, pricesIncluded, country, rates, peopleCount, names, itemsMethod, itemCount,
   itemEntry, itemsReview, tip, delivery, discount, roundUp, quickCheck,
   chargesEdit, result,
 }
@@ -34,6 +34,8 @@ class WNav {
 class WizardState {
   final List<WNav> stack;
   final bool delivery;
+  /// Menu prices already include VAT & service → nothing is added on top.
+  final bool pricesIncluded;
   final Country? country;   // chosen for this bill (null = skipped / USD)
   final int itemTotal;      // planned number of items
   final bool returnToCheck; // editing from the Quick check
@@ -43,6 +45,7 @@ class WizardState {
   const WizardState({
     this.stack = const [WNav(WStep.orderType)],
     this.delivery = false,
+    this.pricesIncluded = false,
     this.country,
     this.itemTotal = 0,
     this.returnToCheck = false,
@@ -55,11 +58,12 @@ class WizardState {
   bool get canGoBack => stack.length > 1 && step != WStep.result;
 
   WizardState copyWith({
-    List<WNav>? stack, bool? delivery, Country? country, bool clearCountry = false,
+    List<WNav>? stack, bool? delivery, bool? pricesIncluded, Country? country, bool clearCountry = false,
     int? itemTotal, bool? returnToCheck, bool? busy, String? message, bool clearMessage = false,
   }) => WizardState(
     stack: stack ?? this.stack,
     delivery: delivery ?? this.delivery,
+    pricesIncluded: pricesIncluded ?? this.pricesIncluded,
     country: clearCountry ? null : (country ?? this.country),
     itemTotal: itemTotal ?? this.itemTotal,
     returnToCheck: returnToCheck ?? this.returnToCheck,
@@ -113,24 +117,39 @@ class WizardController extends Notifier<WizardState> {
 
   void chooseOrderType({required bool delivery}) {
     state = state.copyWith(delivery: delivery);
+    _go(const WNav(WStep.pricesIncluded));
+  }
+
+  // ── 1b · Are the menu prices final? ─────────────────────────────────────────
+
+  void setPricesIncluded(bool included) {
+    state = state.copyWith(pricesIncluded: included);
     final cur = ref.read(currencyProvider.notifier);
     if (cur.hasDefault) {
       // Saved default → skip the country pages and use its rates.
       final c = countryByCode(ref.read(countryProvider));
       state = state.copyWith(country: c);
-      _setRates(cur.defaultVat, delivery ? 0 : cur.defaultService);
+      if (included) { _setRates(0, 0); } else { _setRates(cur.defaultVat, state.delivery ? 0 : cur.defaultService); }
       _go(const WNav(WStep.peopleCount));
     } else {
       _go(const WNav(WStep.country));
     }
   }
 
+  /// From the charges editor: switch "prices include VAT & service" on or off.
+  void setPricesIncludedFlag(bool included) => state = state.copyWith(pricesIncluded: included);
+
   // ── 2 · Country & rates ─────────────────────────────────────────────────────
 
   void pickCountry(Country c) {
     state = state.copyWith(country: c);
     ref.read(currencyProvider.notifier).use(c.currency, country: c.code);
-    _go(const WNav(WStep.rates));
+    if (state.pricesIncluded) {
+      _setRates(0, 0);           // final prices → no VAT/service page
+      _go(const WNav(WStep.peopleCount));
+    } else {
+      _go(const WNav(WStep.rates));
+    }
   }
 
   void skipCountry() {
@@ -360,7 +379,7 @@ class WizardController extends Notifier<WizardState> {
 
   /// "Step x of 8" for the top bar (0 = no label).
   static int stepNumber(WStep s) => switch (s) {
-    WStep.orderType => 1,
+    WStep.orderType || WStep.pricesIncluded => 1,
     WStep.country || WStep.rates => 2,
     WStep.peopleCount || WStep.names => 3,
     WStep.itemsMethod || WStep.itemCount || WStep.itemEntry || WStep.itemsReview => 4,

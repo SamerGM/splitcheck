@@ -254,6 +254,17 @@ class S {
   String get deliveryOrder => _t('Delivery', 'دليفري');
   String get deliveryOrderHint => _t('Ordered online — with a delivery fee', 'طلب أونلاين — فيه رسوم توصيل');
 
+  // Prices final?
+  String get pricesFinalQ => _t('Are the menu prices final?', 'أسعار المنيو نهائية؟');
+  String get pricesFinalHint => _t('Do they already include VAT and service charge?', 'يعني شاملة الضريبة والخدمة؟');
+  String get yesIncluded => _t('Yes — already included', 'أيوه — شاملة');
+  String get yesIncludedHint => _t('Prices are final — nothing will be added', 'الأسعار نهائية — مش هنزوّد حاجة');
+  String get noAddOnTop => _t('No — add them on top', 'لا — تتضاف عليها');
+  String get noAddOnTopHint => _t('VAT and service will be added to the bill', 'الضريبة والخدمة هتتضاف على الفاتورة');
+  String get vatAndService => _t('VAT & service', 'الضريبة والخدمة');
+  String get includedInPrices => _t('Included in prices', 'شاملة في الأسعار');
+  String get pricesIncludeToggle => _t('Prices already include VAT & service', 'الأسعار شاملة الضريبة والخدمة');
+
   // Country & rates
   String get countryHint => _t('Sets the currency and the usual VAT & service', 'بتحدد العملة والضريبة والخدمة المعتادة');
   String get searchCountry => _t('Search country or currency', 'دوّر على دولة أو عملة');

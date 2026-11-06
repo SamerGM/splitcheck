@@ -50,6 +50,34 @@ class _OrderTypePageState extends ConsumerState<OrderTypePage> {
   }
 }
 
+// ── 1b · Are the menu prices final? ──────────────────────────────────────────
+
+class PricesIncludedPage extends ConsumerStatefulWidget {
+  const PricesIncludedPage({super.key});
+  @override ConsumerState<PricesIncludedPage> createState() => _PricesIncludedPageState();
+}
+
+class _PricesIncludedPageState extends ConsumerState<PricesIncludedPage> {
+  late bool _included = ref.read(wizardProvider).pricesIncluded;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = ref.watch(stringsProvider);
+    return WizardPage(
+      title: s.pricesFinalQ,
+      subtitle: s.pricesFinalHint,
+      primaryLabel: s.continueBtn,
+      onPrimary: () => ref.read(wizardProvider.notifier).setPricesIncluded(_included),
+      children: [
+        OptionCard(emoji: '✅', title: s.yesIncluded, hint: s.yesIncludedHint,
+            selected: _included, onTap: () => setState(() => _included = true)),
+        OptionCard(emoji: '➕', title: s.noAddOnTop, hint: s.noAddOnTopHint,
+            selected: !_included, onTap: () => setState(() => _included = false)),
+      ],
+    );
+  }
+}
+
 // ── 2a · Country & currency ───────────────────────────────────────────────────
 
 class CountryPage extends ConsumerStatefulWidget {

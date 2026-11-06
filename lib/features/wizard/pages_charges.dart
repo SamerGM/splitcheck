@@ -244,6 +244,8 @@ class QuickCheckPage extends ConsumerWidget {
           if (ext.hasDiscount)
             line('${s.discountLabel}${ext.discountPct > 0 ? ' ${s.fmtPct(ext.discountPct)}' : ''}',
                 '−${fmtMoney(ref, ext.discountAmount(sub))}', color: p.green),
+          if (w.pricesIncluded && ext.vatPct == 0 && ext.servicePct == 0)
+            line(s.vatAndService, s.includedInPrices),
           if (ext.vatPct > 0) line('${s.vatLabel} ${s.fmtPct(ext.vatPct)}', fmtMoney(ref, ext.vatAmount(sub))),
           if (ext.servicePct > 0) line('${s.serviceLabel} ${s.fmtPct(ext.servicePct)}', fmtMoney(ref, ext.serviceAmount(sub))),
           line(s.tipLabel, ext.tipPct > 0 ? '${s.fmtPct(ext.tipPct)} · ${fmtMoney(ref, ext.tipAmount(sub))}' : s.noneOpt),
@@ -283,6 +285,7 @@ class _ChargesEditPageState extends ConsumerState<ChargesEditPage> {
   late bool _fixed = _e.discountFixed > 0;
   late final _disc = TextEditingController(text: _plainNum(_fixed ? _e.discountFixed : _e.discountPct));
   late bool _whole = _e.roundUpTo > 0;
+  late bool _included = ref.read(wizardProvider).pricesIncluded;
 
   @override
   void dispose() {
@@ -293,8 +296,9 @@ class _ChargesEditPageState extends ConsumerState<ChargesEditPage> {
   void _save() {
     double pct(TextEditingController c) => (_num(c.text) ?? 0).clamp(0, 100).toDouble();
     final d = (_num(_disc.text) ?? 0).clamp(0, double.infinity).toDouble();
+    ref.read(wizardProvider.notifier).setPricesIncludedFlag(_included);
     ref.read(wizardProvider.notifier).saveCharges(_e.copyWith(
-      vatPct: pct(_vat), servicePct: pct(_svc), tipPct: pct(_tip),
+      vatPct: _included ? 0 : pct(_vat), servicePct: _included ? 0 : pct(_svc), tipPct: pct(_tip),
       deliveryFee: (_num(_del.text) ?? 0).clamp(0, double.infinity).toDouble(),
       discountPct: _fixed ? 0 : d.clamp(0, 100).toDouble(), discountFixed: _fixed ? d : 0,
       roundUpTo: _whole ? 1 : 0,
@@ -321,8 +325,16 @@ class _ChargesEditPageState extends ConsumerState<ChargesEditPage> {
       primaryLabel: s.saveBtn,
       onPrimary: _save,
       children: [
-        pctRow(s.vatLabel, _vat),
-        pctRow(s.serviceCharge, _svc),
+        WCard(child: Row(children: [
+          Expanded(child: Text(s.pricesIncludeToggle, style: TextStyle(fontSize: 16, color: p.label))),
+          CupertinoSwitch(value: _included, activeTrackColor: p.green,
+              onChanged: (v) { HapticFeedback.selectionClick(); setState(() => _included = v); }),
+        ])),
+        const SizedBox(height: 12),
+        if (!_included) ...[
+          pctRow(s.vatLabel, _vat),
+          pctRow(s.serviceCharge, _svc),
+        ],
         pctRow(s.tipLabel, _tip),
         if (w.delivery)
           Padding(

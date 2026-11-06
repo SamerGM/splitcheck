@@ -29,10 +29,11 @@ void main() {
   test('dine-in in Egypt: full flow, usual rates, totals add up', () async {
     expect(step(), WStep.orderType);
     w().chooseOrderType(delivery: false);
+    w().setPricesIncluded(false);
     expect(step(), WStep.country);
     w().pickCountry(countryByCode('EG')!);
     expect(step(), WStep.rates);
-    expect(w().suggestedRates(), (14.0, 12.0));
+    expect(w().suggestedRates(), (14.0, 12.0));  // published Egypt rates
     await w().confirmRates(vat: 14, service: 12, makeDefault: false);
     expect(c.read(currencyProvider), 'EGP');
     expect(step(), WStep.peopleCount);
@@ -72,6 +73,7 @@ void main() {
 
   test('delivery: service 0 by default, delivery-fee page, whole numbers', () async {
     w().chooseOrderType(delivery: true);
+    w().setPricesIncluded(false);
     w().pickCountry(countryByCode('EG')!);
     expect(w().suggestedRates(), (14.0, 0.0));       // no service on delivery
     await w().confirmRates(vat: 14, service: 0, makeDefault: false);
@@ -94,6 +96,7 @@ void main() {
 
   test('make default → next bill skips country & rates; Back goes back', () async {
     w().chooseOrderType(delivery: false);
+    w().setPricesIncluded(false);
     w().pickCountry(countryByCode('AE')!);
     await w().confirmRates(vat: 5, service: 10, makeDefault: true);
     expect(c.read(currencyProvider.notifier).hasDefault, isTrue);
@@ -103,6 +106,7 @@ void main() {
 
     w().startOver();
     w().chooseOrderType(delivery: false);
+    w().setPricesIncluded(false);
     expect(step(), WStep.peopleCount);               // country pages skipped
     expect(c.read(billDraftProvider).extras.vatPct, 5);
     expect(c.read(billDraftProvider).extras.servicePct, 10);
@@ -110,6 +114,7 @@ void main() {
 
   test('Quick check edits return to the Quick check; review edit/delete/add', () async {
     w().chooseOrderType(delivery: false);
+    w().setPricesIncluded(false);
     w().skipCountry();
     w().setPeopleCount(2);
     w().confirmNames(['Nour', 'Ali']);
@@ -153,9 +158,29 @@ void main() {
     expect(c.read(billDraftProvider).extras.tipPct, 0);
   });
 
+  test('prices already final → no VAT/service page and nothing added', () async {
+    w().chooseOrderType(delivery: false);
+    expect(step(), WStep.pricesIncluded);
+    w().setPricesIncluded(true);
+    expect(step(), WStep.country);
+    w().pickCountry(countryByCode('EG')!);
+    expect(step(), WStep.peopleCount);               // rates page skipped
+    expect(c.read(billDraftProvider).extras.vatPct, 0);
+    expect(c.read(billDraftProvider).extras.servicePct, 0);
+    w().setPeopleCount(2);
+    w().confirmNames(['A', 'B']);
+    w().chooseManual();
+    w().setItemCount(1);
+    w().saveItem(0, name: 'Koshari', price: 100, whoIds: [id('A'), id('B')]);
+    w().itemsDone(); w().setTip(0); w().setDiscount(); w().setRoundUp(false);
+    await w().splitIt();
+    expect(c.read(splitResultProvider)!.grandTotal, 100); // final prices, no extras
+  });
+
   test('saved groups and "me" first', () async {
     await c.read(myNameProvider.notifier).set('Samer');
     w().chooseOrderType(delivery: false);
+    w().setPricesIncluded(false);
     w().skipCountry();
     w().setPeopleCount(3);
     expect(w().pendingNames, ['Samer', '', '']);

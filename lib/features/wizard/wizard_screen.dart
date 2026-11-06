@@ -21,6 +21,7 @@ class WizardScreen extends ConsumerWidget {
 
   Widget _page(WizardState w) => switch (w.step) {
     WStep.orderType   => const OrderTypePage(),
+    WStep.pricesIncluded => const PricesIncludedPage(),
     WStep.country     => const CountryPage(),
     WStep.rates       => const RatesPage(),
     WStep.peopleCount => const PeopleCountPage(),
