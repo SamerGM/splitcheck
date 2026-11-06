@@ -178,10 +178,13 @@ class AppGlyph extends StatelessWidget {
   const AppGlyph({super.key, this.size = 28});
 
   @override
-  Widget build(BuildContext context) => Image.asset(
-        'assets/icon/icon.png',
-        width: size, height: size,
-        filterQuality: FilterQuality.medium,
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.2237), // iOS icon corner ratio
+        child: Image.asset(
+          'assets/icon/icon.png',
+          width: size, height: size,
+          filterQuality: FilterQuality.medium,
+        ),
       );
 }
 
