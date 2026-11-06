@@ -189,6 +189,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
     _pickerOpen = false;
     if (picked != null) {
+      ctl.checkpoint();
       await ctl.confirmSelectedPeople(picked.ids, portions: picked.portions);
       _scrollToBottom();
     }
@@ -223,6 +224,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final bill     = ref.watch(finalBillProvider);
     final s        = ref.watch(stringsProvider);
     final p        = Palette.of(context);
+    final canUndo  = ref.watch(canUndoProvider);
+    final lastUserIndex = messages.lastIndexWhere((m) => m.role == MessageRole.user);
 
     ref.listen(chatProvider,     (_, __) => _scrollToBottom());
     ref.listen(isTypingProvider, (_, __) => _scrollToBottom());
@@ -266,6 +269,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     key: ValueKey(msg.id),
                     msg: msg,
                     grouped: prev?.role == msg.role,
+                    // Undo sits under your most recent answer.
+                    undoLabel: canUndo && i == lastUserIndex ? s.undo : null,
+                    onUndo: () {
+                      HapticFeedback.mediumImpact();
+                      ref.read(chatProvider.notifier).undo();
+                    },
                     onChip: (chip) {
                       HapticFeedback.selectionClick();
                       ref.read(chatProvider.notifier).chipTapped(msg, chip);
@@ -310,6 +319,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     FlowStep.discount    => 0.89,
     FlowStep.confirm || FlowStep.editMenu => 0.95,
     FlowStep.result      => 1.0,
+    FlowStep.equalTotal  => 0.55,
   };
 }
 
@@ -392,7 +402,10 @@ class _Bubble extends StatelessWidget {
   final ChatMessage msg;
   final bool grouped;
   final void Function(QuickChip chip) onChip;
-  const _Bubble({super.key, required this.msg, required this.grouped, required this.onChip});
+  final String? undoLabel;   // shown as "↩ Undo" under this message when set
+  final VoidCallback? onUndo;
+  const _Bubble({super.key, required this.msg, required this.grouped, required this.onChip,
+      this.undoLabel, this.onUndo});
 
   @override
   Widget build(BuildContext context) {
@@ -427,6 +440,18 @@ class _Bubble extends StatelessWidget {
         crossAxisAlignment: isBot ? CrossAxisAlignment.start : CrossAxisAlignment.end,
         children: [
           bubble,
+          if (undoLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: PressableScale(
+                onTap: onUndo,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(CupertinoIcons.arrow_uturn_left, size: 13, color: p.accent),
+                  const SizedBox(width: 4),
+                  Text(undoLabel!, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: p.accent)),
+                ]),
+              ),
+            ),
           if (chips.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),

@@ -12,6 +12,8 @@ final historyServiceProvider = Provider<HistoryService>((ref) => HistoryService(
 final voiceLocaleProvider   = NotifierProvider<_LocaleNotifier, VoiceLocale>(() => _LocaleNotifier());
 final flowStepProvider      = NotifierProvider<_StepNotifier, FlowStep>(() => _StepNotifier());
 final isTypingProvider      = NotifierProvider<_BoolNotifier, bool>(() => _BoolNotifier());
+/// True when the last answer can be taken back with Undo.
+final canUndoProvider       = NotifierProvider<_BoolNotifier, bool>(() => _BoolNotifier());
 final splitResultProvider   = NotifierProvider<_ResultNotifier, SplitResult?>(() => _ResultNotifier());
 final finalBillProvider     = NotifierProvider<_BillNotifier, Bill?>(() => _BillNotifier());
 
@@ -55,6 +57,7 @@ class BillDraftNotifier extends Notifier<BillDraft> {
   void setItems(List<BillItem> v) => state = state.copyWith(items: v);
   void setExtras(BillExtras v) => state = state.copyWith(extras: v);
   void reset() => state = BillDraft.empty();
+  void restore(BillDraft d) => state = d;
 }
 
 final billDraftProvider = NotifierProvider<BillDraftNotifier, BillDraft>(
@@ -82,4 +85,4 @@ final historyProvider = AsyncNotifierProvider<HistoryNotifier, List<Bill>>(
   HistoryNotifier.new,
 );
 
-enum FlowStep { peopleCount, people, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, delivery, discount, confirm, result }
+enum FlowStep { peopleCount, people, itemCount, itemName, itemPrice, itemWho, itemSummary, itemEdit, editMenu, vat, service, tip, delivery, discount, confirm, result, equalTotal }

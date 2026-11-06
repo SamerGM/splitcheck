@@ -18,6 +18,19 @@ final chatProvider = NotifierProvider<FlowController, List<ChatMessage>>(
   FlowController.new,
 );
 
+/// Everything needed to take back one answer: the chat, the bill so far,
+/// the step, and the controller's own working fields.
+class _Snapshot {
+  final List<ChatMessage> messages;
+  final Map<QuickChip, bool> chipUsed;
+  final BillDraft draft;
+  final FlowStep step;
+  final SplitResult? result;
+  final Bill? bill;
+  final Map<String, Object?> fields;
+  _Snapshot(this.messages, this.chipUsed, this.draft, this.step, this.result, this.bill, this.fields);
+}
+
 class FlowController extends Notifier<List<ChatMessage>> {
   static const _uuid = Uuid();
 
@@ -42,6 +55,11 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   // Place name (asked from the final check)
   bool _awaitingPlaceName = false;
+
+  // Undo
+  final List<_Snapshot> _undo = [];
+  int _gen = 0;               // bumped on undo/reset so in-flight bot replies are dropped
+  String? _lastSavedBillId;   // removed from History if the result is undone
 
   @override
   List<ChatMessage> build() {
@@ -72,8 +90,10 @@ class FlowController extends Notifier<List<ChatMessage>> {
   }
 
   Future<void> _bot(String text, {List<QuickChip>? chips, int ms = 450}) async {
+    final gen = _gen;
     ref.read(isTypingProvider.notifier).value = true;
     await Future.delayed(Duration(milliseconds: ms));
+    if (gen != _gen) return; // undone or reset while "typing"
     ref.read(isTypingProvider.notifier).value = false;
     // A new question makes every older button stale — disable them so an old
     // tap can't jump the flow back to a previous step.
@@ -88,6 +108,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
   /// Called by the UI when a quick-reply button is tapped.
   void chipTapped(ChatMessage msg, QuickChip chip) {
     if (chip.used) return;
+    checkpoint();
     for (final c in msg.chips ?? const <QuickChip>[]) { c.used = true; }
     _addUser(chip.label);
     chip.onTap();
@@ -105,8 +126,81 @@ class FlowController extends Notifier<List<ChatMessage>> {
     return valid.map((id) => it.portionsOf(id) > 1 ? '${_nameOf(id)} ×${it.portionsOf(id)}' : _nameOf(id)).join(', ');
   }
 
+  // ═══════════════════ UNDO ════════════════════════════════════════════════
+
+  Map<String, Object?> _fields() => {
+    'expectedPeople': _expectedPeople, 'previousPeople': _previousPeople,
+    'pendingName': _pendingName, 'pendingPrice': _pendingPrice, 'pendingQty': _pendingQty,
+    'totalItems': _totalItems, 'currentIndex': _currentIndex,
+    'editingIndex': _editingIndex, 'editSubStep': _editSubStep,
+    'returnToConfirm': _returnToConfirm, 'discountMode': _discountMode,
+    'awaitingPlaceName': _awaitingPlaceName,
+  };
+
+  void _restoreFields(Map<String, Object?> f) {
+    _expectedPeople    = f['expectedPeople'] as int;
+    _previousPeople    = f['previousPeople'] as List<Person>;
+    _pendingName       = f['pendingName'] as String;
+    _pendingPrice      = f['pendingPrice'] as double;
+    _pendingQty        = f['pendingQty'] as int;
+    _totalItems        = f['totalItems'] as int;
+    _currentIndex      = f['currentIndex'] as int;
+    _editingIndex      = f['editingIndex'] as int;
+    _editSubStep       = f['editSubStep'] as String;
+    _returnToConfirm   = f['returnToConfirm'] as bool;
+    _discountMode      = f['discountMode'] as String;
+    _awaitingPlaceName = f['awaitingPlaceName'] as bool;
+  }
+
+  /// Remember the current state so the next answer can be undone.
+  /// Called before every typed answer, button tap, picker choice and scan.
+  void checkpoint() {
+    _undo.add(_Snapshot(
+      List.of(state),
+      {for (final m in state) for (final c in m.chips ?? const <QuickChip>[]) c: c.used},
+      _draftState,
+      _step,
+      ref.read(splitResultProvider),
+      ref.read(finalBillProvider),
+      _fields(),
+    ));
+    if (_undo.length > 60) _undo.removeAt(0);
+    ref.read(canUndoProvider.notifier).value = true;
+  }
+
+  /// Takes back the last answer: the chat, the bill and the step go back
+  /// exactly to how they were before it.
+  void undo() {
+    if (_undo.isEmpty) return;
+    final snap = _undo.removeLast();
+    _gen++;
+    ref.read(isTypingProvider.notifier).value = false;
+    snap.chipUsed.forEach((chip, used) => chip.used = used);
+    _draft.restore(snap.draft);
+    _restoreFields(snap.fields);
+    if (snap.result == null && ref.read(splitResultProvider) != null && _lastSavedBillId != null) {
+      _removeFromHistory(_lastSavedBillId!);
+      _lastSavedBillId = null;
+    }
+    ref.read(splitResultProvider.notifier).value = snap.result;
+    ref.read(finalBillProvider.notifier).value   = snap.bill;
+    state = snap.messages;
+    _setStep(snap.step);
+    ref.read(canUndoProvider.notifier).value = _undo.isNotEmpty;
+  }
+
+  Future<void> _removeFromHistory(String id) async {
+    try {
+      final svc = ref.read(historyServiceProvider);
+      await svc.init();
+      await svc.delete(id);
+      ref.invalidate(historyProvider);
+    } catch (_) {}
+  }
+
   Future<void> handleInput(String text) async {
     if (text.trim().isEmpty) return;
+    checkpoint();
     _addUser(text);
 
     switch (_step) {
@@ -128,6 +222,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       case FlowStep.discount: await _handleDiscount(text); break;
       case FlowStep.confirm:  await _handleConfirm(text);  break;
       case FlowStep.result:   await _bot(_s.billDone, ms: 200); break;
+      case FlowStep.equalTotal: await _handleEqualTotal(text); break;
     }
   }
 
@@ -163,6 +258,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       chips: [
         for (final g in groups)
           QuickChip(label: g.join(s.isAr ? '، ' : ', '), onTap: () => _handlePeople(g.join(', '))),
+        QuickChip(label: s.skipNamesEqual, onTap: () => _skipNamesAndSplitEqually(n)),
       ],
       ms: 300,
     );
@@ -252,7 +348,40 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> _askItemCount({bool more = false}) async {
     _setStep(FlowStep.itemCount);
-    await _bot(more ? _s.howManyMoreItems : '${_s.howManyItems}\n\n${_s.scanTip}', ms: 300);
+    await _bot(more ? _s.howManyMoreItems : '${_s.howManyItems}\n\n${_s.scanTip}',
+        chips: more ? null : [QuickChip(label: _s.splitTotalEqually, onTap: _askEqualTotal)],
+        ms: 300);
+  }
+
+  // ═══════════════════ QUICK EQUAL SPLIT ═══════════════════════════════════
+
+  /// "Skip names": Person 1 … Person n, then just the total.
+  Future<void> _skipNamesAndSplitEqually(int n) async {
+    _draft.setPeople([
+      for (var i = 0; i < n; i++)
+        Person(id: _uuid.v4(), name: _s.personN(i + 1), color: kPersonColors[i % kPersonColors.length]),
+    ]);
+    _expectedPeople = 0;
+    await _askEqualTotal();
+  }
+
+  Future<void> _askEqualTotal() async {
+    _setStep(FlowStep.equalTotal);
+    await _bot(_s.askEqualTotal, ms: 250);
+  }
+
+  Future<void> _handleEqualTotal(String text) async {
+    final total = parseNumber(text);
+    if (total == null || total <= 0) {
+      await _bot(_s.pleaseEnterValidNumber, ms: 200);
+      return;
+    }
+    final n = _draftState.people.length;
+    _draft.setItems([BillItem(id: _uuid.v4(), name: _s.billTotalItem, price: total)]);
+    // The total already includes tax and service.
+    _draft.setExtras(_draftState.extras.copyWith(vatPct: 0, servicePct: 0));
+    await _bot(_s.equalTotalSet(_fmt(total), n, _fmt(total / n)), ms: 250);
+    await _showFinalConfirm();
   }
 
   Future<void> _handleItemCount(String text) async {
@@ -534,6 +663,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
 
   Future<void> handleOcrFile(File file) async {
     final s = _s;
+    checkpoint();
     _addUser(s.scanning);
     ref.read(isTypingProvider.notifier).value = true;
     try {
@@ -846,6 +976,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
       final svc = ref.read(historyServiceProvider);
       await svc.init();
       await svc.save(bill);
+      _lastSavedBillId = bill.id;
       ref.invalidate(historyProvider);
     } catch (_) {/* history is best-effort */}
   }
@@ -880,6 +1011,10 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _returnToConfirm = false;
     _discountMode   = '';
     _draft.reset();
+    _undo.clear();
+    _gen++;
+    _lastSavedBillId = null;
+    ref.read(canUndoProvider.notifier).value = false;
     ref.read(isTypingProvider.notifier).value = false;
     ref.read(splitResultProvider.notifier).value = null;
     ref.read(finalBillProvider.notifier).value   = null;

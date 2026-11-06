@@ -178,4 +178,50 @@ void main() {
     await tap('Mona, Karim');
     expect(c.read(billDraftProvider).people.map((p) => p.name), ['Mona', 'Karim']);
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('undo takes back answers step by step, including the final split', () async {
+    await settle();
+    await tap('2');
+    await say('Nour, Ali');
+    await tap('Yep 👍');
+    await say('1');
+    await say('Tea');
+    expect(c.read(flowStepProvider), FlowStep.itemPrice);
+    final before = c.read(chatProvider).length;
+
+    ctl().undo();                                   // takes back "Tea"
+    expect(c.read(flowStepProvider), FlowStep.itemName);
+    expect(c.read(chatProvider).length, lessThan(before));
+    expect(lastBot(), contains('Item 1 of 1'));
+
+    ctl().undo();                                   // takes back "1"
+    expect(c.read(flowStepProvider), FlowStep.itemCount);
+
+    await say('1'); await say('Coffee'); await say('12');
+    await ctl().handleInput('everyone'); await settle();
+    await tap('Looks good 👍'); await tap('None'); await tap('None');
+    await tap('No tip'); await tap('No'); await tap('Nope');
+    await tap('Split it ✨');
+    expect(c.read(splitResultProvider), isNotNull);
+
+    ctl().undo();                                   // takes back "Split it"
+    expect(c.read(splitResultProvider), isNull);
+    expect(c.read(flowStepProvider), FlowStep.confirm);
+    await tap('Split it ✨');                       // the button works again
+    expect(c.read(splitResultProvider)!.grandTotal, 12);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('quick equal split: skip names, type the total, done', () async {
+    await settle();
+    await tap('3');
+    await tap('➗ Skip names — split equally');
+    expect(c.read(flowStepProvider), FlowStep.equalTotal);
+    await say('100');
+    expect(lastBot(), contains('Quick check'));
+    await tap('Split it ✨');
+    final r = c.read(splitResultProvider)!;
+    expect(r.personResults.map((x) => x.person.name), ['Person 1', 'Person 2', 'Person 3']);
+    expect(r.personResults.map((x) => x.total).toList()..sort(), [33.33, 33.33, 33.34]);
+    expect(r.grandTotal, 100);
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

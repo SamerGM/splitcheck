@@ -174,6 +174,16 @@ class S {
   String get today => _t('Today', 'النهارده');
   String get yesterday => _t('Yesterday', 'امبارح');
 
+  // ── Undo & quick equal split ───────────────────────────────────────────────
+  String get undo => _t('Undo', 'تراجع');
+  String get skipNamesEqual => _t('➗ Skip names — split equally', '➗ بدون أسماء — قسّم بالتساوي');
+  String get splitTotalEqually => _t('➗ Just split the total equally', '➗ قسّم الإجمالي بالتساوي');
+  String get askEqualTotal => _t('What’s the bill total? (including tax and service)', 'إجمالي الفاتورة كام؟ (شامل الضريبة والخدمة)');
+  String equalTotalSet(String total, int n, String each) => _t(
+      'Total $total ÷ $n ≈ $each each', 'الإجمالي $total ÷ ${toArabicDigits('$n')} ≈ $each لكل شخص');
+  String get billTotalItem => _t('Bill total', 'إجمالي الفاتورة');
+  String personN(int i) => _t('Person $i', 'شخص ${toArabicDigits('$i')}');
+
   // ── Delivery ───────────────────────────────────────────────────────────────
   String get deliveryQuestion => _t('Any delivery fee? 🛵', 'في رسوم توصيل؟ 🛵');
   String get deliveryYes => _t('Yes', 'نعم');
