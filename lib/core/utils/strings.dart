@@ -240,6 +240,93 @@ class S {
   String get noRounding => _t('No rounding ✓', 'بدون تقريب ✓');
   String get roundingMenu => _t('Rounding', 'التقريب');
 
+  // ── Full-screen pages ──────────────────────────────────────────────────────
+  String get continueBtn => _t('Continue', 'متابعة');
+  String stepOf(int n, int total) => _t('Step $n of $total', 'الخطوة ${toArabicDigits('$n')} من ${toArabicDigits('$total')}');
+  String get nextItem => _t('Next item →', 'الصنف التالي ←');
+  String get saveBtn => _t('Save', 'حفظ');
+  String get otherNumber => _t('Other number…', 'رقم تاني…');
+
+  // Order type
+  String get whereEat => _t('Where did you eat?', 'أكلتوا فين؟');
+  String get dineIn => _t('Dine-in', 'في المطعم');
+  String get dineInHint => _t('Restaurant or café — usually with service charge', 'مطعم أو كافيه — غالباً فيه خدمة');
+  String get deliveryOrder => _t('Delivery', 'دليفري');
+  String get deliveryOrderHint => _t('Ordered online — with a delivery fee', 'طلب أونلاين — فيه رسوم توصيل');
+
+  // Country & rates
+  String get countryHint => _t('Sets the currency and the usual VAT & service', 'بتحدد العملة والضريبة والخدمة المعتادة');
+  String get searchCountry => _t('Search country or currency', 'دوّر على دولة أو عملة');
+  String get skipUseUsd => _t('Skip — use US Dollar', 'تخطي — استخدم الدولار');
+  String usualRates(String country) => _t('Usual rates in $country — tap a box to edit', 'المعتاد في $country — دوس على الخانة للتعديل');
+  String get serviceCharge => _t('Service charge', 'رسوم الخدمة');
+  String get makeMyDefault => _t('⭐ Make it my default', '⭐ خليها الافتراضية');
+  String get thisBillOnly => _t('Use for this bill only', 'للفاتورة دي بس');
+  String get defaultNote => _t('Default = skip this step next time. Change it anytime in ⚙️ Settings.',
+      'الافتراضية = مش هنسألك تاني. تقدر تغيّرها في أي وقت من ⚙️ الإعدادات.');
+  String get defaultCountry => _t('Default country & currency', 'الدولة والعملة الافتراضية');
+  String get noDefaultCountry => _t('Not set — asked on each bill', 'مش محددة — بنسأل كل فاتورة');
+
+  // People
+  String get howManyPeopleTitle => _t('How many people?', 'كام شخص؟');
+  String get includingYou => _t('Including you', 'وأنت معاهم');
+  String get orPickGroup => _t('Or pick a saved group', 'أو اختار مجموعة محفوظة');
+  String get whoSplitting => _t('Who’s splitting?', 'مين بيقسم؟');
+  String get namesHint => _t('Type names, use 🎤 or pick from contacts 📇 · empty = Person 1, 2…',
+      'اكتب الأسماء أو استخدم 🎤 أو اختار من جهات الاتصال 📇 · الفاضي = شخص ١، ٢…');
+  String get meTag => _t('me', 'أنا');
+  String get saveAsGroupBtn => _t('💾 Save as group', '💾 احفظهم كمجموعة');
+  String get nameThisGroup => _t('Name this group', 'سمّي المجموعة');
+  List<String> get groupSuggestions => isAr
+      ? const ['⚽ أصحاب النادي', '💼 الشغل', '👨‍👩‍👧 العيلة', '🎓 أصحاب الجامعة', '🏠 الجيران', '🏋️ أصحاب الجيم']
+      : const ['⚽ Club friends', '💼 Work group', '👨‍👩‍👧 Family', '🎓 Uni friends', '🏠 Neighbours', '🏋️ Gym buddies'];
+
+  // Items
+  String get addTheItems => _t('Add the items', 'أضف الأصناف');
+  String get howAddItems => _t('How do you want to add what you ordered?', 'تحب تضيف الطلبات إزاي؟');
+  String get scanReceiptOpt => _t('Scan receipt', 'صوّر الفاتورة');
+  String get scanReceiptHint => _t('Take a photo — I read the items and prices', 'صوّرها وأنا أقرأ الأصناف والأسعار');
+  String get enterManually => _t('Enter manually', 'أدخلها بنفسك');
+  String get enterManuallyHint => _t('Type each item, one by one', 'اكتب كل صنف لوحده');
+  String get howManyItemsTitle => _t('How many items?', 'كام صنف؟');
+  String get itemsCountHint => _t('Each different dish or drink on the bill', 'كل طبق أو مشروب مختلف في الفاتورة');
+  String itemXofY(int i, int n) => _t('Item $i of $n', 'الصنف ${toArabicDigits('$i')} من ${toArabicDigits('$n')}');
+  String get whatOrdered => _t('What did you order?', 'طلبتوا إيه؟');
+  String get priceLabel => _t('Price', 'السعر');
+  String get whoShared => _t('Who shared it?', 'مين شارك فيه؟');
+  String splitBetween(String names, String each) => _t('Split between $names · $each each', 'متقسم على $names · $each لكل واحد');
+  String get fillItem => _t('Add a name, a price and who shared it', 'اكتب الاسم والسعر ومين شارك فيه');
+  String get yourItems => _t('Your items', 'أصنافك');
+  String itemsTotal(int n, String amt) => _t('$n item${n == 1 ? '' : 's'} · $amt', '${toArabicDigits('$n')} أصناف · $amt');
+  String get editSmall => _t('✏️ Edit', '✏️ تعديل');
+  String get deleteSmall => _t('🗑 Delete', '🗑 حذف');
+  String get addItemBtn => _t('+ Add item', '+ أضف صنف');
+  String get looksGoodNext => _t('Looks good →', 'تمام ←');
+
+  // Charges
+  String get tipHint => _t('Shared by what each person ordered', 'بيتقسم حسب طلب كل واحد');
+  String get noneOpt => _t('None', 'لا');
+  String get otherPct => _t('Other %…', 'نسبة تانية…');
+  String get deliveryTitle => _t('Delivery fee 🛵', 'رسوم التوصيل 🛵');
+  String get deliveryEqualHint => _t('Split equally — everyone gets the same delivery', 'بتتقسم بالتساوي — التوصيل للكل');
+  String get noDeliveryFee => _t('No delivery fee', 'مفيش رسوم توصيل');
+  String get percentage => _t('% Percentage', '٪ نسبة');
+  String get applyBtn => _t('Apply', 'تطبيق');
+  String get noDiscountBtn => _t('No discount', 'مفيش خصم');
+  String get wholeTitle => _t('Make everyone’s share a whole number?', 'تخلي نصيب كل واحد رقم صحيح؟');
+  String get wholeHint => _t('No decimals, easier to pay.\nExample: 10.03 → 11', 'من غير كسور، أسهل في الدفع.\nمثال: ١٠٫٠٣ ← ١١');
+  String get yesRoundUp => _t('Yes, round up', 'أيوه، قرّب لفوق');
+  String get wholeNumbers => _t('Whole numbers', 'أرقام صحيحة');
+  String get onLabel => _t('On', 'مفعّل');
+  String get offLabel => _t('Off', 'مقفول');
+  String get editCharges => _t('Edit charges', 'تعديل الرسوم');
+
+  // Quick check
+  String get quickCheckTitle => _t('Quick check', 'مراجعة سريعة');
+  String peopleSection(int n) => _t('People · $n', 'الأشخاص · ${toArabicDigits('$n')}');
+  String itemsSection(int n) => _t('Items · $n', 'الأصناف · ${toArabicDigits('$n')}');
+  String get chargesSection => _t('Charges', 'الرسوم');
+
   // ── Delivery ───────────────────────────────────────────────────────────────
   String get deliveryQuestion => _t('Any delivery fee? 🛵', 'في رسوم توصيل؟ 🛵');
   String get deliveryYes => _t('Yes', 'نعم');

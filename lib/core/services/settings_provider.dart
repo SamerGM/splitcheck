@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/strings.dart';
 import 'settings_service.dart';
 export 'settings_service.dart' show FriendGroup;
+import '../utils/countries.dart';
 import '../utils/currency.dart';
 
 final settingsServiceProvider = Provider<SettingsService>((ref) => SettingsService());
@@ -74,15 +75,24 @@ class CurrencyNotifier extends Notifier<String> {
   String build() => 'USD';
 
   bool _hasDefault = false;
-  /// True once the user saved a default — the chat then stops asking.
+  /// True once the user saved a default — the country step is then skipped.
   bool get hasDefault => _hasDefault;
+
+  double _vat = 0, _service = 0;
+  /// VAT / service saved with the default country.
+  double get defaultVat => _vat;
+  double get defaultService => _service;
 
   Future<void> init() async {
     final svc = ref.read(settingsServiceProvider);
     final saved = svc.loadDefaultCurrency();
     _hasDefault = saved != null && kCurrencies.containsKey(saved);
     state = _hasDefault ? saved! : 'USD';
-    ref.read(countryProvider.notifier).set(svc.loadDefaultCountry());
+    final country = svc.loadDefaultCountry();
+    ref.read(countryProvider.notifier).set(country);
+    final c = countryByCode(country);
+    _vat = svc.loadDefaultVat() ?? c?.vat ?? 0;
+    _service = svc.loadDefaultService() ?? c?.service ?? 0;
   }
 
   /// Use for the current bill only.
@@ -92,10 +102,14 @@ class CurrencyNotifier extends Notifier<String> {
   }
 
   /// Use and remember as the default (Settings / "make it my default").
-  Future<void> setDefault(String code, {required String country}) async {
+  Future<void> setDefault(String code, {required String country, double? vat, double? service}) async {
     use(code, country: country);
     _hasDefault = true;
-    await ref.read(settingsServiceProvider).saveDefault(country: country, currency: code);
+    final c = countryByCode(country);
+    _vat = vat ?? c?.vat ?? 0;
+    _service = service ?? c?.service ?? 0;
+    await ref.read(settingsServiceProvider)
+        .saveDefault(country: country, currency: code, vat: _vat, service: _service);
   }
 }
 

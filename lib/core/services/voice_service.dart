@@ -58,3 +58,6 @@ class VoiceService {
   Future<void> stop() => _speech.stop();
   Future<void> cancel() => _speech.cancel();
 }
+
+/// Voice input language for an app language code ('en' / 'ar').
+VoiceLocale voiceLocaleFor(String lang) => lang == 'ar' ? VoiceLocale.arabic : VoiceLocale.english;

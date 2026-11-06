@@ -11,7 +11,8 @@ import 'shared/theme/app_theme.dart';
 import 'shared/widgets/apple_widgets.dart';
 import 'core/services/providers.dart';
 import 'core/services/settings_provider.dart';
-import 'features/flow/chat_screen.dart';
+import 'core/services/voice_service.dart';
+import 'features/wizard/wizard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -104,7 +105,7 @@ class _AppInitState extends ConsumerState<_AppInit> {
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 450),
-      child: _ready ? const ChatScreen() : _Splash(showText: _loaded),
+      child: _ready ? const WizardScreen() : _Splash(showText: _loaded),
     );
   }
 }

@@ -13,6 +13,8 @@ class SettingsService {
   static const _currencyKey = 'currency';
   static const _countryKey  = 'country';
   static const _myNameKey   = 'my_name';
+  static const _vatKey      = 'default_vat';
+  static const _serviceKey  = 'default_service';
   static const _groupsKey   = 'friend_groups';
 
   late SharedPreferences _prefs;
@@ -58,9 +60,15 @@ class SettingsService {
   String? loadDefaultCurrency() => _prefs.getString(_currencyKey);
   String? loadDefaultCountry()  => _prefs.getString(_countryKey);
 
-  Future<void> saveDefault({required String country, required String currency}) async {
+  double? loadDefaultVat()     => _prefs.getDouble(_vatKey);
+  double? loadDefaultService() => _prefs.getDouble(_serviceKey);
+
+  Future<void> saveDefault({required String country, required String currency,
+      double? vat, double? service}) async {
     await _prefs.setString(_countryKey, country);
     await _prefs.setString(_currencyKey, currency);
+    if (vat != null) await _prefs.setDouble(_vatKey, vat);
+    if (service != null) await _prefs.setDouble(_serviceKey, service);
   }
 
   // ── My name (for "Include me") ─────────────────────────────────────────────

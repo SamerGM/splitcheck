@@ -15,14 +15,14 @@ import '../../core/utils/currency.dart';
 import '../../core/utils/strings.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
-import '../flow/flow_controller.dart';
 
 class ResultCard extends ConsumerStatefulWidget {
   final SplitResult result;
   final Bill bill;
-  /// False when shown from History (there is no chat to restart).
+  /// Shown as a third action button when set.
+  final VoidCallback? onNewBill;
   final bool showNewBill;
-  const ResultCard({super.key, required this.result, required this.bill, this.showNewBill = true});
+  const ResultCard({super.key, required this.result, required this.bill, this.showNewBill = false, this.onNewBill});
   @override ConsumerState<ResultCard> createState() => _ResultCardState();
 }
 
@@ -206,10 +206,10 @@ class _ResultCardState extends ConsumerState<ResultCard> {
           Expanded(child: _Action(icon: CupertinoIcons.square_arrow_up, label: s.share, onTap: () => _share(s))),
           const SizedBox(width: 10),
           Expanded(child: _Action(icon: CupertinoIcons.doc_on_doc, label: s.copy, onTap: () => _copy(s))),
-          if (widget.showNewBill) ...[
+          if (widget.showNewBill && widget.onNewBill != null) ...[
             const SizedBox(width: 10),
             Expanded(child: _Action(icon: CupertinoIcons.plus, label: s.newBill,
-                onTap: () { HapticFeedback.mediumImpact(); ref.read(chatProvider.notifier).reset(); })),
+                onTap: () { HapticFeedback.mediumImpact(); widget.onNewBill?.call(); })),
           ],
         ]),
 
