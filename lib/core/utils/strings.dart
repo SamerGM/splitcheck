@@ -275,6 +275,8 @@ class S {
   String get namesHint => _t('Type names, use 🎤 or pick from contacts 📇 · empty = Person 1, 2…',
       'اكتب الأسماء أو استخدم 🎤 أو اختار من جهات الاتصال 📇 · الفاضي = شخص ١، ٢…');
   String get meTag => _t('me', 'أنا');
+  String get meDefault => _t('Me', 'أنا');
+  String get includeMeHint => _t('Are you splitting this bill too?', 'وأنت كمان هتقسم معاهم؟');
   String get saveAsGroupBtn => _t('💾 Save as group', '💾 احفظهم كمجموعة');
   String get nameThisGroup => _t('Name this group', 'سمّي المجموعة');
   List<String> get groupSuggestions => isAr

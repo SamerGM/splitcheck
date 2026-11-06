@@ -254,20 +254,47 @@ class NamesPage extends ConsumerStatefulWidget {
 
 class _NamesPageState extends ConsumerState<NamesPage> {
   final List<TextEditingController> _rows = [];
+  late final TextEditingController _me;
+  bool _includeMe = true;
 
   @override
   void initState() {
     super.initState();
-    for (final n in ref.read(wizardProvider.notifier).pendingNames) {
-      _rows.add(TextEditingController(text: n));
+    final myName = ref.read(myNameProvider);
+    _me = TextEditingController(text: myName);
+    final names = [...ref.read(wizardProvider.notifier).pendingNames];
+    if (myName.isNotEmpty) {
+      // You're in the list (count page adds you first, or editing / a group with you in it).
+      final i = names.indexWhere((n) => n.trim().toLowerCase() == myName.toLowerCase());
+      _includeMe = i >= 0;
+      if (i >= 0) names.removeAt(i);
+    } else if (names.length > 1 && names.last.trim().isEmpty && names.every((n) => n.trim().isEmpty)) {
+      // No saved name yet: "How many people (including you)" → one of the blanks is you.
+      names.removeLast();
     }
-    if (_rows.isEmpty) { _rows..add(TextEditingController())..add(TextEditingController()); }
+    for (final n in names) { _rows.add(TextEditingController(text: n)); }
+    if (_rows.isEmpty) _rows.add(TextEditingController());
   }
 
   @override
-  void dispose() { for (final c in _rows) { c.dispose(); } super.dispose(); }
+  void dispose() {
+    for (final c in _rows) { c.dispose(); }
+    _me.dispose();
+    super.dispose();
+  }
 
-  List<String> get _names => _rows.map((c) => c.text).toList();
+  int get _offset => _includeMe ? 1 : 0;
+
+  /// Everyone on the bill, you first (empty name → "Me").
+  List<String> get _names => [
+    if (_includeMe) _me.text.trim().isEmpty ? ref.read(stringsProvider).meDefault : _me.text.trim(),
+    ..._rows.map((c) => c.text),
+  ];
+
+  void _rememberMyName() {
+    final v = _me.text.trim();
+    if (v.isNotEmpty && v != ref.read(myNameProvider)) ref.read(myNameProvider.notifier).set(v);
+  }
 
   Future<void> _pickContact(TextEditingController c) async {
     final name = await ContactsService.pickName();
@@ -305,21 +332,51 @@ class _NamesPageState extends ConsumerState<NamesPage> {
   Widget build(BuildContext context) {
     final p = Palette.of(context);
     final s = ref.watch(stringsProvider);
-    final me = ref.watch(myNameProvider);
-
     return WizardPage(
       title: s.whoSplitting,
       subtitle: s.namesHint,
       primaryLabel: s.continueBtn,
-      onPrimary: () => ref.read(wizardProvider.notifier).confirmNames(_names),
+      onPrimary: () { _rememberMyName(); ref.read(wizardProvider.notifier).confirmNames(_names); },
       children: [
+        // ── Include me (your name is remembered for next time) ──
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 12),
+          decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(14)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(s.includeMe, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: p.label)),
+                Text(s.includeMeHint, style: TextStyle(fontSize: 13, color: p.secondary)),
+              ])),
+              CupertinoSwitch(
+                value: _includeMe,
+                activeTrackColor: p.green,
+                onChanged: (v) { HapticFeedback.selectionClick(); setState(() => _includeMe = v); },
+              ),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Avatar(
+                person: Person(id: 'me', name: _me.text.trim().isEmpty ? s.meDefault : _me.text.trim(),
+                    color: _includeMe ? personColor(0) : p.tertiary),
+                size: 38,
+              ),
+              const SizedBox(width: 10),
+              Expanded(child: VoiceField(
+                controller: _me, placeholder: s.yourName, fill: p.fill,
+                onChanged: (_) => setState(() {}),
+              )),
+            ]),
+          ]),
+        ),
+        const SizedBox(height: 14),
         for (var i = 0; i < _rows.length; i++) ...[
           Row(children: [
             Avatar(
               person: Person(
                 id: '$i',
-                name: _rows[i].text.trim().isEmpty ? s.n(i + 1) : _rows[i].text.trim(),
-                color: personColor(i),
+                name: _rows[i].text.trim().isEmpty ? s.n(i + 1 + _offset) : _rows[i].text.trim(),
+                color: personColor(i + _offset),
               ),
               size: 38,
             ),
@@ -327,12 +384,9 @@ class _NamesPageState extends ConsumerState<NamesPage> {
             Expanded(
               child: VoiceField(
                 controller: _rows[i],
-                placeholder: s.personN(i + 1),
+                placeholder: s.personN(i + 1 + _offset),
                 onChanged: (_) => setState(() {}),
-                trailing: me.isNotEmpty && _rows[i].text.trim().toLowerCase() == me.toLowerCase()
-                    ? Padding(padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Text('· ${s.meTag}', style: TextStyle(fontSize: 13, color: p.green, fontWeight: FontWeight.w600)))
-                    : CupertinoButton(
+                trailing: CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         minimumSize: const Size(32, 36),
                         onPressed: () => _pickContact(_rows[i]),
@@ -343,11 +397,11 @@ class _NamesPageState extends ConsumerState<NamesPage> {
             CupertinoButton(
               padding: const EdgeInsetsDirectional.only(start: 8),
               minimumSize: const Size(32, 36),
-              onPressed: _rows.length <= 1 ? null : () {
+              onPressed: _rows.length + _offset <= 1 ? null : () {
                 HapticFeedback.selectionClick();
                 setState(() => _rows.removeAt(i).dispose());
               },
-              child: Icon(CupertinoIcons.minus_circle, color: _rows.length <= 1 ? p.tertiary : p.red, size: 24),
+              child: Icon(CupertinoIcons.minus_circle, color: _rows.length + _offset <= 1 ? p.tertiary : p.red, size: 24),
             ),
           ]),
           const SizedBox(height: 10),
