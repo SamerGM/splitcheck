@@ -182,7 +182,7 @@ class S {
   String get yesterday => _t('Yesterday', 'امبارح');
 
   // ── Undo & quick equal split ───────────────────────────────────────────────
-  String get undo => _t('Undo', 'تراجع');
+  String get undo => _t('Undo', 'الرجوع');
   String get skipNamesEqual => _t('➗ Skip names — split equally', '➗ بدون أسماء — قسّم بالتساوي');
   String get splitTotalEqually => _t('➗ Just split the total equally', '➗ قسّم الإجمالي بالتساوي');
   String get askEqualTotal => _t('What’s the bill total? (including tax and service)', 'إجمالي الفاتورة كام؟ (شامل الضريبة والخدمة)');
