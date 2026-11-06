@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'shared/theme/app_theme.dart';
+import 'core/services/providers.dart';
 import 'core/services/settings_provider.dart';
 import 'features/flow/chat_screen.dart';
 
@@ -47,6 +48,17 @@ class SplitCheckApp extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
+      // Status/navigation bar icons follow light/dark on every screen.
+      builder: (context, child) {
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: (dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
+          ),
+          child: child!,
+        );
+      },
       home: const _AppInit(),
     );
   }
@@ -73,6 +85,9 @@ class _AppInitState extends ConsumerState<_AppInit> {
     await ref.read(languageProvider.notifier).init();
     await ref.read(currencyProvider.notifier).init();
     await ref.read(roundUpProvider.notifier).init();
+    // Voice input starts in the saved app language.
+    ref.read(voiceLocaleProvider.notifier).value =
+        voiceLocaleFor(ref.read(languageProvider));
     if (mounted) setState(() => _ready = true);
   }
 

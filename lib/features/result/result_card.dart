@@ -58,9 +58,10 @@ class _ResultCardState extends ConsumerState<ResultCard> {
     if (unequal) {
       // e.g. "Pizza ×3 · 2/3" — this person had 2 of 3 portions.
       final total = ids.fold<int>(0, (a, id) => a + it.portionsOf(id).clamp(1, 1000));
-      return '${it.label} · ${it.portionsOf(person.id)}/$total';
+      return '${s.itemLabel(it.name, it.quantity)} · ${s.n(it.portionsOf(person.id))}/${s.n(total)}';
     }
-    return ids.length > 1 ? '${it.label} · ${s.sharedTag} ÷${ids.length}' : it.label;
+    final label = s.itemLabel(it.name, it.quantity);
+    return ids.length > 1 ? '$label · ${s.sharedTag} ÷${s.n(ids.length)}' : label;
   }
 
   List<String> _personLines(S s, PersonResult pr) => [
@@ -321,7 +322,7 @@ class _PersonRowState extends State<_PersonRow> {
             AnimatedRotation(
               turns: _open ? 0.25 : 0,
               duration: const Duration(milliseconds: 200),
-              child: Icon(CupertinoIcons.chevron_right, size: 16, color: p.tertiary),
+              child: Icon(CupertinoIcons.chevron_forward, size: 16, color: p.tertiary),
             ),
           ]),
           AnimatedSize(

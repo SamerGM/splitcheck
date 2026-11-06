@@ -123,7 +123,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final valid = it.personIds.where((id) => _draftState.people.any((p) => p.id == id)).toList();
     final unequal = valid.any((id) => it.portionsOf(id) > 1);
     if (!unequal && (valid.isEmpty || valid.length == _draftState.people.length)) return _s.everyoneLower;
-    return valid.map((id) => it.portionsOf(id) > 1 ? '${_nameOf(id)} ×${it.portionsOf(id)}' : _nameOf(id)).join(', ');
+    return valid.map((id) => it.portionsOf(id) > 1 ? '${_nameOf(id)} ${_s.times(it.portionsOf(id))}' : _nameOf(id)).join(', ');
   }
 
   // ═══════════════════ UNDO ════════════════════════════════════════════════
@@ -432,7 +432,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _editSubStep  = '';
     if (qty > 1) await _bot(_s.qtyConfirmed(qty, _fmt(unit), _fmt(_pendingPrice)), ms: 200);
     _setStep(FlowStep.itemWho);
-    final label = qty > 1 ? '$_pendingName ×$qty' : _pendingName;
+    final label = _s.itemLabel(_pendingName, qty);
     await _bot(_s.itemWhoPrompt(label, _fmt(_pendingPrice)), ms: 300);
   }
 
@@ -537,7 +537,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
         quantity: _pendingQty, personIds: ids, portions: portions);
     _draft.addItem(item);
 
-    await _bot(_s.itemConfirmed(item.label, _fmt(item.price), _whoLabel(item)), ms: 200);
+    await _bot(_s.itemConfirmed(_s.itemLabel(item.name, item.quantity), _fmt(item.price), _whoLabel(item)), ms: 200);
 
     _currentIndex++;
     _pendingName = '';
@@ -566,7 +566,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     _editingIndex = -1;
     final subtotal = items.fold(0.0, (sum, i) => sum + i.price);
     final list = items.asMap().entries
-        .map((e) => '${e.key + 1}. ${e.value.label} · ${_fmt(e.value.price)} → ${_whoLabel(e.value)}')
+        .map((e) => '${_s.n(e.key + 1)}. ${_s.itemLabel(e.value.name, e.value.quantity)} · ${_fmt(e.value.price)} → ${_whoLabel(e.value)}')
         .join('\n');
 
     await _bot('${s.allItemsAdded(_fmt(subtotal))}\n\n$list', chips: [
@@ -584,7 +584,7 @@ class FlowController extends Notifier<List<ChatMessage>> {
     final items = _draftState.items;
     await _bot(_s.whichItemToEdit, chips: [
       for (var i = 0; i < items.length; i++)
-        QuickChip(label: '${items[i].label} · ${_fmt(items[i].price)}', onTap: () => _showItemEditOptions(i)),
+        QuickChip(label: '${_s.itemLabel(items[i].name, items[i].quantity)} · ${_fmt(items[i].price)}', onTap: () => _showItemEditOptions(i)),
       QuickChip(label: _s.back, onTap: _showItemSummary),
     ], ms: 200);
   }

@@ -31,6 +31,13 @@ class S {
 
   String get appName => 'SplitCheck';
 
+  /// Whole number in the current language's digits: 3 / ٣.
+  String n(int v) => isAr ? toArabicDigits('$v') : '$v';
+  /// "×2" / "×٢"
+  String times(int v) => '×${n(v)}';
+  /// "Cola ×2" / "كولا ×٢" (no suffix for a single item)
+  String itemLabel(String name, int qty) => qty > 1 ? '$name ${times(qty)}' : name;
+
   // ── People ─────────────────────────────────────────────────────────────────
   String get welcome => _t('Hey there 👋 Let’s split this bill.', 'أهلاً 👋 يلا نقسم الفاتورة.');
   String get howManyPeople => _t('How many persons will split the check?', 'كم شخص سيتم تقسيم الفاتورة عليهم؟');

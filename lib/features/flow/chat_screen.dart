@@ -699,6 +699,7 @@ class _PeoplePickerState extends ConsumerState<PeoplePicker> {
           inSheet: true,
           children: [
             _PickRow(
+              timesLabel: s.times,
               leading: Container(
                 width: 34, height: 34,
                 decoration: BoxDecoration(color: p.green, shape: BoxShape.circle),
@@ -716,6 +717,7 @@ class _PeoplePickerState extends ConsumerState<PeoplePicker> {
             ),
             for (final person in widget.people)
               _PickRow(
+                timesLabel: s.times,
                 leading: Avatar(person: person, size: 34),
                 title: person.name,
                 selected: _sel.contains(person.id),
@@ -756,8 +758,9 @@ class _PickRow extends StatelessWidget {
   final int? portions;            // shown as a − n + stepper when not null
   final VoidCallback onTap;
   final VoidCallback? onMinus, onPlus;
+  final String Function(int) timesLabel;
   const _PickRow({required this.leading, required this.title, required this.selected,
-      required this.onTap, this.portions, this.onMinus, this.onPlus});
+      required this.onTap, required this.timesLabel, this.portions, this.onMinus, this.onPlus});
 
   @override
   Widget build(BuildContext context) {
@@ -783,7 +786,7 @@ class _PickRow extends StatelessWidget {
             stepBtn(CupertinoIcons.minus, onMinus, portions! > 1),
             SizedBox(
               width: 34,
-              child: Text('×$portions', textAlign: TextAlign.center, style: TextStyle(
+              child: Text(timesLabel(portions!), textAlign: TextAlign.center, style: TextStyle(
                 fontSize: 15, fontWeight: FontWeight.w600,
                 color: portions! > 1 ? p.accent : p.secondary)),
             ),
