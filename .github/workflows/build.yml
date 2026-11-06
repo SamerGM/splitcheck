@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: write   # needed to publish the test APK as a release file
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -79,3 +82,19 @@ jobs:
         with:
           name: splitcheck-v1.0-build${{ github.run_number }}-apk
           path: build/app/outputs/flutter-apk/splitcheck-v1.0-build${{ github.run_number }}.apk
+
+      # Direct download link for phones: publish the APK as a release file.
+      # Each build gets its own pre-release, and "test-latest" always points at the newest one:
+      #   https://github.com/<owner>/<repo>/releases/download/test-latest/splitcheck-test.apk
+      - name: Publish test APK (direct link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=build/app/outputs/flutter-apk/splitcheck-v1.0-build${{ github.run_number }}.apk
+          cp "$APK" splitcheck-test.apk
+          NOTES="Test build ${{ github.run_number }} from ${{ github.ref_name }} (${GITHUB_SHA::7})"
+          gh release create "test-build-${{ github.run_number }}" "$APK" --prerelease \
+            --target "$GITHUB_SHA" --title "Test build ${{ github.run_number }}" --notes "$NOTES"
+          gh release delete test-latest --yes --cleanup-tag || true
+          gh release create test-latest splitcheck-test.apk --prerelease \
+            --target "$GITHUB_SHA" --title "Latest test build" --notes "$NOTES"
