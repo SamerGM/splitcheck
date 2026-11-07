@@ -232,6 +232,30 @@ class SectionLabel extends StatelessWidget {
   }
 }
 
+/// Tap-to-advance: show the selection for a moment, then move on.
+void advanceSoon(VoidCallback next) => Future.delayed(const Duration(milliseconds: 180), next);
+
+/// Round → button shown inside an "Other number" field once something is typed.
+class GoButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  const GoButton({super.key, this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Semantics(
+      button: true, label: 'Go', excludeSemantics: true,
+      child: CupertinoButton(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        minimumSize: const Size(34, 34),
+        onPressed: onTap == null ? null : () { HapticFeedback.lightImpact(); onTap!(); },
+        child: Icon(Directionality.of(context) == TextDirection.rtl
+            ? CupertinoIcons.arrow_left_circle_fill : CupertinoIcons.arrow_right_circle_fill,
+            color: onTap == null ? p.tertiary : p.accent, size: 30),
+      ),
+    );
+  }
+}
+
 /// White rounded card.
 class WCard extends StatelessWidget {
   final Widget child;

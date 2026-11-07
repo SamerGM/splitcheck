@@ -42,10 +42,9 @@ class _TipPageState extends ConsumerState<TipPage> {
   @override
   void dispose() { _other.dispose(); super.dispose(); }
 
-  double? get _pct {
+  double? get _otherPct {
     final o = _num(_other.text);
-    if (o != null) return o.clamp(0, 100).toDouble();
-    return _sel == null ? null : _opts[_sel!];
+    return o?.clamp(0, 100).toDouble();
   }
 
   @override
@@ -54,18 +53,22 @@ class _TipPageState extends ConsumerState<TipPage> {
     return WizardPage(
       title: s.tipQuestion,
       subtitle: s.tipHint,
-      primaryLabel: s.continueBtn,
-      onPrimary: _pct == null ? null : () => ref.read(wizardProvider.notifier).setTip(_pct!),
       children: [
         NumberGrid(
           columns: 4,
           labels: [s.noneOpt, for (final v in _opts.skip(1)) s.fmtPct(v)],
           selected: _other.text.trim().isEmpty ? _sel : null,
-          onTap: (i) => setState(() { _sel = i; _other.clear(); }),
+          onTap: (i) {
+            setState(() { _sel = i; _other.clear(); });
+            advanceSoon(() => ref.read(wizardProvider.notifier).setTip(_opts[i]));
+          },
         ),
         const SizedBox(height: 12),
         VoiceField(controller: _other, placeholder: s.otherPct, numeric: true, suffixText: '%',
-            onChanged: (_) => setState(() {})),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) { if (_otherPct != null) ref.read(wizardProvider.notifier).setTip(_otherPct!); },
+            trailing: _otherPct == null ? null
+                : GoButton(onTap: () => ref.read(wizardProvider.notifier).setTip(_otherPct!))),
       ],
     );
   }

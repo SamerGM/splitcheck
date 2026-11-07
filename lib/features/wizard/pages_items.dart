@@ -33,6 +33,7 @@ class ItemsMethodPage extends ConsumerStatefulWidget {
 
 class _ItemsMethodPageState extends ConsumerState<ItemsMethodPage> {
   bool _scan = false;
+  bool _picked = false;
 
   Future<void> _doScan() async {
     final s = ref.read(stringsProvider);
@@ -62,13 +63,19 @@ class _ItemsMethodPageState extends ConsumerState<ItemsMethodPage> {
     return WizardPage(
       title: s.addTheItems,
       subtitle: s.howAddItems,
-      primaryLabel: s.continueBtn,
-      onPrimary: w.busy ? null : () => _scan ? _doScan() : ref.read(wizardProvider.notifier).chooseManual(),
       children: [
         OptionCard(emoji: '📷', title: s.scanReceiptOpt, hint: s.scanReceiptHint,
-            selected: _scan, onTap: () => setState(() => _scan = true)),
+            selected: _picked && _scan, onTap: () {
+              if (w.busy) return;
+              setState(() { _scan = true; _picked = true; });
+              advanceSoon(_doScan);
+            }),
         OptionCard(emoji: '✍️', title: s.enterManually, hint: s.enterManuallyHint,
-            selected: !_scan, onTap: () => setState(() => _scan = false)),
+            selected: _picked && !_scan, onTap: () {
+              if (w.busy) return;
+              setState(() { _scan = false; _picked = true; });
+              advanceSoon(() => ref.read(wizardProvider.notifier).chooseManual());
+            }),
         if (w.busy)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -101,10 +108,9 @@ class _ItemCountPageState extends ConsumerState<ItemCountPage> {
   @override
   void dispose() { _other.dispose(); super.dispose(); }
 
-  int? get _count {
+  int? get _otherCount {
     final o = double.tryParse(normalizeDigits(_other.text.trim()))?.toInt();
-    if (o != null && o > 0) return o.clamp(1, 100);
-    return _sel == null ? null : _sel! + 1;
+    return (o != null && o > 0) ? o.clamp(1, 100) : null;
   }
 
   @override
@@ -113,16 +119,23 @@ class _ItemCountPageState extends ConsumerState<ItemCountPage> {
     return WizardPage(
       title: s.howManyItemsTitle,
       subtitle: s.itemsCountHint,
-      primaryLabel: s.continueBtn,
-      onPrimary: _count == null ? null : () => ref.read(wizardProvider.notifier).setItemCount(_count!),
       children: [
         NumberGrid(
           labels: [for (var n = 1; n <= 10; n++) s.n(n)],
           selected: _other.text.trim().isEmpty ? _sel : null,
-          onTap: (i) => setState(() { _sel = i; _other.clear(); }),
+          onTap: (i) {
+            setState(() { _sel = i; _other.clear(); });
+            advanceSoon(() => ref.read(wizardProvider.notifier).setItemCount(i + 1));
+          },
         ),
         const SizedBox(height: 12),
-        VoiceField(controller: _other, placeholder: s.otherNumber, numeric: true, onChanged: (_) => setState(() {})),
+        VoiceField(
+          controller: _other, placeholder: s.otherNumber, numeric: true,
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) { if (_otherCount != null) ref.read(wizardProvider.notifier).setItemCount(_otherCount!); },
+          trailing: _otherCount == null ? null
+              : GoButton(onTap: () => ref.read(wizardProvider.notifier).setItemCount(_otherCount!)),
+        ),
       ],
     );
   }

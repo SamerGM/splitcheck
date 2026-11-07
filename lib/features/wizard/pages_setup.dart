@@ -31,6 +31,12 @@ class OrderTypePage extends ConsumerStatefulWidget {
 
 class _OrderTypePageState extends ConsumerState<OrderTypePage> {
   late bool _delivery = ref.read(wizardProvider).delivery;
+  bool _picked = false;
+
+  void _choose(bool delivery) {
+    setState(() { _delivery = delivery; _picked = true; });
+    advanceSoon(() => ref.read(wizardProvider.notifier).chooseOrderType(delivery: delivery));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,13 +44,11 @@ class _OrderTypePageState extends ConsumerState<OrderTypePage> {
     return WizardPage(
       eyebrow: s.newBill,
       title: s.whereEat,
-      primaryLabel: s.continueBtn,
-      onPrimary: () => ref.read(wizardProvider.notifier).chooseOrderType(delivery: _delivery),
       children: [
         OptionCard(emoji: '🍽️', title: s.dineIn, hint: s.dineInHint,
-            selected: !_delivery, onTap: () => setState(() => _delivery = false)),
+            selected: _picked && !_delivery, onTap: () => _choose(false)),
         OptionCard(emoji: '🛵', title: s.deliveryOrder, hint: s.deliveryOrderHint,
-            selected: _delivery, onTap: () => setState(() => _delivery = true)),
+            selected: _picked && _delivery, onTap: () => _choose(true)),
       ],
     );
   }
@@ -59,6 +63,12 @@ class PricesIncludedPage extends ConsumerStatefulWidget {
 
 class _PricesIncludedPageState extends ConsumerState<PricesIncludedPage> {
   late bool _included = ref.read(wizardProvider).pricesIncluded;
+  bool _picked = false;
+
+  void _choose(bool included) {
+    setState(() { _included = included; _picked = true; });
+    advanceSoon(() => ref.read(wizardProvider.notifier).setPricesIncluded(included));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,13 +76,11 @@ class _PricesIncludedPageState extends ConsumerState<PricesIncludedPage> {
     return WizardPage(
       title: s.pricesFinalQ,
       subtitle: s.pricesFinalHint,
-      primaryLabel: s.continueBtn,
-      onPrimary: () => ref.read(wizardProvider.notifier).setPricesIncluded(_included),
       children: [
         OptionCard(emoji: '✅', title: s.yesIncluded, hint: s.yesIncludedHint,
-            selected: _included, onTap: () => setState(() => _included = true)),
+            selected: _picked && _included, onTap: () => _choose(true)),
         OptionCard(emoji: '➕', title: s.noAddOnTop, hint: s.noAddOnTopHint,
-            selected: !_included, onTap: () => setState(() => _included = false)),
+            selected: _picked && !_included, onTap: () => _choose(false)),
       ],
     );
   }
@@ -222,10 +230,9 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
   @override
   void dispose() { _other.dispose(); super.dispose(); }
 
-  int? get _count {
+  int? get _otherCount {
     final o = _num(_other.text)?.toInt();
-    if (o != null && o > 0) return o.clamp(1, 50);
-    return _sel == null ? null : _counts[_sel!];
+    return (o != null && o > 0) ? o.clamp(1, 50) : null;
   }
 
   @override
@@ -236,16 +243,23 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
     return WizardPage(
       title: s.howManyPeopleTitle,
       subtitle: s.includingYou,
-      primaryLabel: s.continueBtn,
-      onPrimary: _count == null ? null : () => ref.read(wizardProvider.notifier).setPeopleCount(_count!),
       children: [
         NumberGrid(
           labels: [for (final n in _counts) s.n(n)],
           selected: _other.text.trim().isEmpty ? _sel : null,
-          onTap: (i) => setState(() { _sel = i; _other.clear(); }),
+          onTap: (i) {
+            setState(() { _sel = i; _other.clear(); });
+            advanceSoon(() => ref.read(wizardProvider.notifier).setPeopleCount(_counts[i]));
+          },
         ),
         const SizedBox(height: 12),
-        VoiceField(controller: _other, placeholder: s.otherNumber, numeric: true, onChanged: (_) => setState(() {})),
+        VoiceField(
+          controller: _other, placeholder: s.otherNumber, numeric: true,
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) { if (_otherCount != null) ref.read(wizardProvider.notifier).setPeopleCount(_otherCount!); },
+          trailing: _otherCount == null ? null
+              : GoButton(onTap: () => ref.read(wizardProvider.notifier).setPeopleCount(_otherCount!)),
+        ),
         if (groups.isNotEmpty) ...[
           SectionLabel(s.orPickGroup),
           InsetGroup(separatorInset: 16, children: [
@@ -296,11 +310,15 @@ class _NamesPageState extends ConsumerState<NamesPage> {
       final i = names.indexWhere((n) => n.trim().toLowerCase() == myName.toLowerCase());
       _includeMe = i >= 0;
       if (i >= 0) names.removeAt(i);
-    } else if (names.length > 1 && names.last.trim().isEmpty && names.every((n) => n.trim().isEmpty)) {
+    } else if (names.length > 1 && names.every((n) => n.trim().isEmpty)) {
       // No saved name yet: "How many people (including you)" → one of the blanks is you.
       names.removeLast();
     }
-    for (final n in names) { _rows.add(TextEditingController(text: n)); }
+    // Generated "Person 1/2…" names come back as empty fields (they're placeholders).
+    for (final n in names) {
+      final isDefault = RegExp(r'^(Person|شخص) [0-9٠-٩]+$').hasMatch(n.trim());
+      _rows.add(TextEditingController(text: isDefault ? '' : n));
+    }
     if (_rows.isEmpty) _rows.add(TextEditingController());
   }
 
@@ -313,11 +331,30 @@ class _NamesPageState extends ConsumerState<NamesPage> {
 
   int get _offset => _includeMe ? 1 : 0;
 
-  /// Everyone on the bill, you first (empty name → "Me").
-  List<String> get _names => [
-    if (_includeMe) _me.text.trim().isEmpty ? ref.read(stringsProvider).meDefault : _me.text.trim(),
-    ..._rows.map((c) => c.text),
-  ];
+  /// The total stays as chosen on "How many people": leaving yourself out adds
+  /// a field; including yourself again removes an empty one.
+  void _setIncludeMe(bool v) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      _includeMe = v;
+      if (!v) {
+        _rows.add(TextEditingController());
+      } else {
+        final i = _rows.lastIndexWhere((c) => c.text.trim().isEmpty);
+        if (i >= 0 && _rows.length > 1) _rows.removeAt(i).dispose();
+      }
+    });
+  }
+
+  /// Everyone on the bill, you first (empty name → "Me"); empty rows → Person 1, 2…
+  List<String> get _names {
+    final s = ref.read(stringsProvider);
+    return [
+      if (_includeMe) _me.text.trim().isEmpty ? s.meDefault : _me.text.trim(),
+      for (var i = 0; i < _rows.length; i++)
+        _rows[i].text.trim().isEmpty ? s.personN(i + 1) : _rows[i].text.trim(),
+    ];
+  }
 
   void _rememberMyName() {
     final v = _me.text.trim();
@@ -379,7 +416,7 @@ class _NamesPageState extends ConsumerState<NamesPage> {
               CupertinoSwitch(
                 value: _includeMe,
                 activeTrackColor: p.green,
-                onChanged: (v) { HapticFeedback.selectionClick(); setState(() => _includeMe = v); },
+                onChanged: _setIncludeMe,
               ),
             ]),
             const SizedBox(height: 8),
@@ -403,7 +440,7 @@ class _NamesPageState extends ConsumerState<NamesPage> {
             Avatar(
               person: Person(
                 id: '$i',
-                name: _rows[i].text.trim().isEmpty ? s.n(i + 1 + _offset) : _rows[i].text.trim(),
+                name: _rows[i].text.trim().isEmpty ? s.n(i + 1) : _rows[i].text.trim(),
                 color: personColor(i + _offset),
               ),
               size: 38,
@@ -412,7 +449,7 @@ class _NamesPageState extends ConsumerState<NamesPage> {
             Expanded(
               child: VoiceField(
                 controller: _rows[i],
-                placeholder: s.personN(i + 1 + _offset),
+                placeholder: s.personN(i + 1),
                 onChanged: (_) => setState(() {}),
                 trailing: CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
