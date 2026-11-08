@@ -13,6 +13,7 @@ import '../../core/services/settings_provider.dart';
 import '../../core/utils/countries.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/number_parser.dart';
+import '../../core/utils/strings.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
 import '../../shared/widgets/voice_field.dart';
@@ -24,83 +25,130 @@ import 'wizard_widgets.dart';
 double? _num(String t) => double.tryParse(normalizeDigits(t.trim()).replaceAll(',', '.'));
 String _plainNum(double v) => v == 0 ? '' : (v == v.roundToDouble() ? v.toStringAsFixed(0) : '$v');
 
-// ── 5 · Tip ───────────────────────────────────────────────────────────────────
+// ── Quick-pick page (Tip, Delivery fee, Discount) ─────────────────────────────
+//
+// Tiles with suggested values, an "Other" field, one big glowing "No …" button
+// that moves on at once, and Back + Next (Next lights up once a value is set).
 
-class TipPage extends ConsumerStatefulWidget {
-  const TipPage({super.key});
-  @override ConsumerState<TipPage> createState() => _TipPageState();
+class _PickPage extends ConsumerStatefulWidget {
+  final String title;
+  final String? subtitle;
+  final Widget? header;                 // e.g. % / Fixed switch
+  final List<double> values;
+  final String Function(double) label;
+  final String otherPlaceholder;
+  final String? prefix, suffix;
+  final double initial;                 // current value on the bill (0 = none)
+  final double? max;                    // e.g. 100 for percentages
+  final String noneLabel;
+  final VoidCallback onNone;
+  final ValueChanged<double> onNext;
+  const _PickPage({super.key, required this.title, this.subtitle, this.header, required this.values,
+      required this.label, required this.otherPlaceholder, this.prefix, this.suffix, required this.initial,
+      this.max, required this.noneLabel, required this.onNone, required this.onNext});
+  @override ConsumerState<_PickPage> createState() => _PickPageState();
 }
 
-class _TipPageState extends ConsumerState<TipPage> {
-  static const _opts = [0.0, 5.0, 10.0, 15.0];
+class _PickPageState extends ConsumerState<_PickPage> {
   late int? _sel = () {
-    final i = _opts.indexOf(ref.read(billDraftProvider).extras.tipPct);
-    return i >= 0 ? i : 0;
+    final i = widget.values.indexOf(widget.initial);
+    return i >= 0 ? i : null;
   }();
-  final _other = TextEditingController();
+  late final _other = TextEditingController(
+      text: widget.initial > 0 && !widget.values.contains(widget.initial) ? _plainNum(widget.initial) : '');
 
   @override
   void dispose() { _other.dispose(); super.dispose(); }
 
-  double? get _otherPct {
-    final o = _num(_other.text);
-    return o?.clamp(0, 100).toDouble();
+  double? get _otherValue {
+    final v = _num(_other.text);
+    if (v == null || v <= 0) return null;
+    if (widget.max != null && v > widget.max!) return null;
+    return v;
   }
+
+  double? get _value => _other.text.trim().isNotEmpty ? _otherValue : (_sel == null ? null : widget.values[_sel!]);
 
   @override
   Widget build(BuildContext context) {
+    final p = Palette.of(context);
     final s = ref.watch(stringsProvider);
+    final v = _value;
+    final tooBig = widget.max != null && (_num(_other.text) ?? 0) > widget.max!;
     return WizardPage(
-      title: s.tipQuestion,
-      subtitle: s.tipHint,
+      title: widget.title,
+      subtitle: widget.subtitle,
+      primaryLabel: s.nextBtn,
+      onPrimary: v == null ? null : () => widget.onNext(v),
       children: [
+        if (widget.header != null) ...[widget.header!, const SizedBox(height: 14)],
         NumberGrid(
-          columns: 4,
-          labels: [s.noneOpt, for (final v in _opts.skip(1)) s.fmtPct(v)],
+          columns: 3,
+          labels: [for (final x in widget.values) widget.label(x)],
           selected: _other.text.trim().isEmpty ? _sel : null,
-          onTap: (i) {
-            setState(() { _sel = i; _other.clear(); });
-            advanceSoon(() => ref.read(wizardProvider.notifier).setTip(_opts[i]));
-          },
+          onTap: (i) => setState(() { _sel = i; _other.clear(); FocusScope.of(context).unfocus(); }),
         ),
         const SizedBox(height: 12),
-        VoiceField(controller: _other, placeholder: s.otherPct, numeric: true, suffixText: '%',
+        VoiceField(controller: _other, placeholder: widget.otherPlaceholder, numeric: true,
+            prefixText: widget.prefix, suffixText: widget.suffix,
             onChanged: (_) => setState(() {}),
-            onSubmitted: (_) { if (_otherPct != null) ref.read(wizardProvider.notifier).setTip(_otherPct!); },
-            trailing: _otherPct == null ? null
-                : GoButton(onTap: () => ref.read(wizardProvider.notifier).setTip(_otherPct!))),
+            onSubmitted: (_) { final o = _otherValue; if (o != null) widget.onNext(o); }),
+        if (tooBig)
+          Padding(padding: const EdgeInsets.only(top: 6),
+              child: Text(s.typeValidPct, style: TextStyle(fontSize: 14, color: p.red))),
+        const SizedBox(height: 56),
+        GlowButton(label: '🙅 ${widget.noneLabel}', onTap: widget.onNone),
       ],
+    );
+  }
+}
+
+String _tileAmount(S s, double v, String cur) => '${s.n(v.round())} $cur';
+
+// ── 5 · Tip ───────────────────────────────────────────────────────────────────
+
+class TipPage extends ConsumerWidget {
+  const TipPage({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(stringsProvider);
+    final ctl = ref.read(wizardProvider.notifier);
+    return _PickPage(
+      title: s.tipQuestion,
+      subtitle: s.tipHint,
+      values: const [5, 10, 15, 20, 25],
+      label: s.fmtPct,
+      otherPlaceholder: s.otherPct,
+      suffix: '%',
+      max: 100,
+      initial: ref.read(billDraftProvider).extras.tipPct,
+      noneLabel: s.noTip,
+      onNone: () => ctl.setTip(0),
+      onNext: ctl.setTip,
     );
   }
 }
 
 // ── 5b · Delivery fee (delivery orders) ───────────────────────────────────────
 
-class DeliveryPage extends ConsumerStatefulWidget {
+class DeliveryPage extends ConsumerWidget {
   const DeliveryPage({super.key});
-  @override ConsumerState<DeliveryPage> createState() => _DeliveryPageState();
-}
-
-class _DeliveryPageState extends ConsumerState<DeliveryPage> {
-  late final _fee = TextEditingController(text: _plainNum(ref.read(billDraftProvider).extras.deliveryFee));
-
   @override
-  void dispose() { _fee.dispose(); super.dispose(); }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(stringsProvider);
-    final v = _num(_fee.text);
-    return WizardPage(
+    final ctl = ref.read(wizardProvider.notifier);
+    final cur = currencySymbol(ref.watch(currencyProvider), arabic: s.isAr);
+    return _PickPage(
       title: s.deliveryTitle,
       subtitle: s.deliveryEqualHint,
-      primaryLabel: s.continueBtn,
-      onPrimary: (v == null || v < 0) ? null : () => ref.read(wizardProvider.notifier).setDelivery(v),
-      children: [
-        VoiceField(controller: _fee, placeholder: '0', numeric: true, large: true,
-            prefixText: currencySymbol(ref.watch(currencyProvider), arabic: s.isAr), onChanged: (_) => setState(() {})),
-        SecondaryButton(s.noDeliveryFee, onTap: () => ref.read(wizardProvider.notifier).setDelivery(0)),
-      ],
+      values: const [5, 10, 15, 20, 25],
+      label: (v) => _tileAmount(s, v, cur),
+      otherPlaceholder: s.otherAmount,
+      prefix: cur,
+      initial: ref.read(billDraftProvider).extras.deliveryFee,
+      noneLabel: s.noDeliveryFee,
+      onNone: () => ctl.setDelivery(0),
+      onNext: ctl.setDelivery,
     );
   }
 }
@@ -114,45 +162,38 @@ class DiscountPage extends ConsumerStatefulWidget {
 
 class _DiscountPageState extends ConsumerState<DiscountPage> {
   late bool _fixed = ref.read(billDraftProvider).extras.discountFixed > 0;
-  late final _amt = TextEditingController(text: _plainNum(_fixed
-      ? ref.read(billDraftProvider).extras.discountFixed
-      : ref.read(billDraftProvider).extras.discountPct));
-
-  @override
-  void dispose() { _amt.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    final p = Palette.of(context);
     final s = ref.watch(stringsProvider);
-    final v = _num(_amt.text);
-    final ok = v != null && v > 0 && (_fixed || v <= 100);
     final ctl = ref.read(wizardProvider.notifier);
-    return WizardPage(
+    final ext = ref.read(billDraftProvider).extras;
+    final cur = currencySymbol(ref.watch(currencyProvider), arabic: s.isAr);
+    final header = SizedBox(
+      width: double.infinity,
+      child: CupertinoSlidingSegmentedControl<bool>(
+        groupValue: _fixed,
+        children: {
+          false: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(s.percentage)),
+          true: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(s.fixedDiscount)),
+        },
+        onValueChanged: (x) { if (x != null) { HapticFeedback.selectionClick(); setState(() => _fixed = x); } },
+      ),
+    );
+    return _PickPage(
+      key: ValueKey(_fixed),          // switching tabs clears the selection
       title: s.discountQuestion,
-      primaryLabel: s.applyBtn,
-      onPrimary: !ok ? null : () => _fixed ? ctl.setDiscount(fixed: v) : ctl.setDiscount(pct: v),
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: CupertinoSlidingSegmentedControl<bool>(
-            groupValue: _fixed,
-            children: {
-              false: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(s.percentage)),
-              true: Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(s.fixedDiscount)),
-            },
-            onValueChanged: (x) { if (x != null) { HapticFeedback.selectionClick(); setState(() => _fixed = x); } },
-          ),
-        ),
-        const SizedBox(height: 14),
-        VoiceField(controller: _amt, placeholder: '0', numeric: true, large: true,
-            prefixText: _fixed ? currencySymbol(ref.watch(currencyProvider), arabic: s.isAr) : null, suffixText: _fixed ? null : '%',
-            onChanged: (_) => setState(() {})),
-        if (v != null && !_fixed && v > 100)
-          Padding(padding: const EdgeInsets.only(top: 6),
-              child: Text(s.typeValidPct, style: TextStyle(fontSize: 14, color: p.red))),
-        SecondaryButton(s.noDiscountBtn, onTap: () => ctl.setDiscount()),
-      ],
+      header: header,
+      values: _fixed ? const [10, 20, 25, 50, 100] : const [5, 10, 15, 20, 25],
+      label: _fixed ? (v) => _tileAmount(s, v, cur) : s.fmtPct,
+      otherPlaceholder: _fixed ? s.otherAmount : s.otherPct,
+      prefix: _fixed ? cur : null,
+      suffix: _fixed ? null : '%',
+      max: _fixed ? null : 100,
+      initial: _fixed ? ext.discountFixed : ext.discountPct,
+      noneLabel: s.noDiscountBtn,
+      onNone: () => ctl.setDiscount(),
+      onNext: (v) => _fixed ? ctl.setDiscount(fixed: v) : ctl.setDiscount(pct: v),
     );
   }
 }
@@ -239,8 +280,24 @@ class QuickCheckPage extends ConsumerWidget {
         WCard(child: Text(d.people.map((x) => x.name).join(s.isAr ? '، ' : ', '),
             style: TextStyle(fontSize: 16, color: p.label))),
         SectionLabel(s.itemsSection(d.items.length), action: s.editSmall, onAction: ctl.editItems),
-        WCard(child: Text('${d.items.map((x) => x.name).join(s.isAr ? '، ' : ', ')} · ${fmtMoney(ref, sub)}',
-            style: TextStyle(fontSize: 16, color: p.label))),
+        WCard(child: Column(children: [
+          for (final it in d.items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: Text.rich(TextSpan(children: [
+                  TextSpan(text: s.itemLabel(it.name, it.quantity), style: TextStyle(fontSize: 16, color: p.label)),
+                  if (_whoOf(it, d.people, s) != null)
+                    TextSpan(text: ' · ${_whoOf(it, d.people, s)}', style: TextStyle(fontSize: 13, color: p.secondary)),
+                ]))),
+                const SizedBox(width: 10),
+                Text(fmtMoney(ref, it.price), style: TextStyle(fontSize: 16, color: p.label,
+                    fontFeatures: const [FontFeature.tabularFigures()])),
+              ]),
+            ),
+          Divider(color: p.separator, height: 14),
+          line(s.itemsTotalLabel, fmtMoney(ref, sub), color: p.label),
+        ])),
         SectionLabel(s.chargesSection, action: s.editSmall, onAction: ctl.editCharges),
         WCard(child: Column(children: [
           line(s.subtotalLabel, fmtMoney(ref, sub)),
@@ -270,6 +327,13 @@ class QuickCheckPage extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// "Kary" / "Mary, Ssmer" for items not shared by everyone; null = everyone.
+String? _whoOf(BillItem it, List<Person> people, S s) {
+  final ids = it.personIds.where((id) => people.any((x) => x.id == id)).toList();
+  if (ids.isEmpty || ids.length == people.length) return null;
+  return [for (final x in people) if (ids.contains(x.id)) x.name].join(s.isAr ? '، ' : ', ');
 }
 
 // ── 8b · Edit charges (from the Quick check) ──────────────────────────────────

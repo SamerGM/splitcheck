@@ -298,7 +298,7 @@ class WizardController extends Notifier<WizardState> {
     final item = (old ?? BillItem(id: _uuid.v4(), name: name, price: price))
         .copyWith(name: name.trim(), price: price, personIds: ids, portions: const {});
     if (index < items.length) { items[index] = item; } else { items.add(item); }
-    _draft.setItems(items);
+    _draft.setItems(numberRepeats(items, arabic: ref.read(stringsProvider).isAr));
 
     final nav = state.nav;
     if (nav.single) { back(); return; } // edited one item from the review page
@@ -393,4 +393,27 @@ class WizardController extends Notifier<WizardState> {
 }
 
 /// For the UI: a stable colour for the n-th person avatar.
+/// "Pizza 2" → "Pizza" (also with Arabic digits: "بيتزا ٢").
+String baseItemName(String name) =>
+    name.trim().replaceFirst(RegExp(r'\s+[0-9٠-٩]+$'), '');
+
+/// Two or more items with the same name get numbered in order:
+/// Pizza, Pizza → Pizza 1, Pizza 2.
+List<BillItem> numberRepeats(List<BillItem> items, {bool arabic = false}) {
+  final groups = <String, List<int>>{};
+  for (var i = 0; i < items.length; i++) {
+    groups.putIfAbsent(baseItemName(items[i].name).toLowerCase(), () => []).add(i);
+  }
+  final out = [...items];
+  for (final idx in groups.values) {
+    if (idx.length < 2) continue;
+    final base = baseItemName(items[idx.first].name);
+    for (var k = 0; k < idx.length; k++) {
+      final n = arabic ? toArabicDigits('${k + 1}') : '${k + 1}';
+      out[idx[k]] = out[idx[k]].copyWith(name: '$base $n');
+    }
+  }
+  return out;
+}
+
 Color personColor(int i) => kPersonColors[i % kPersonColors.length];

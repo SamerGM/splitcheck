@@ -298,6 +298,24 @@ class WCard extends StatelessWidget {
   }
 }
 
+/// Big filled button with a soft glow ("No tip", "No discount", "No delivery fee").
+class GlowButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const GlowButton({super.key, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [BoxShadow(color: p.accent.withValues(alpha: p.isDark ? .55 : .35), blurRadius: 22, offset: const Offset(0, 4))],
+      ),
+      child: AppleButton(label: label, onTap: () { HapticFeedback.lightImpact(); onTap(); }),
+    );
+  }
+}
+
 /// Secondary full-width button (grey).
 class SecondaryButton extends StatelessWidget {
   final String label;

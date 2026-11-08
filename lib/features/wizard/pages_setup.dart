@@ -266,23 +266,33 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
           SectionLabel(s.orPickGroup),
           InsetGroup(separatorInset: 16, children: [
             for (final g in groups)
-              Semantics(button: true, label: g.name, excludeSemantics: true,
-                child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () { HapticFeedback.selectionClick(); ref.read(wizardProvider.notifier).useGroup(g); },
-                onLongPress: () => _groupActions(g),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                  child: Row(children: [
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(g.name, style: TextStyle(fontSize: 17, color: p.label)),
-                      Text(g.members.join(s.isAr ? '، ' : ', '), maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 13, color: p.secondary)),
-                    ])),
-                    Icon(CupertinoIcons.chevron_forward, color: p.tertiary, size: 16),
-                  ]),
-                ),
-              )),
+              Row(children: [
+                Expanded(child: Semantics(button: true, label: g.name, excludeSemantics: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () { HapticFeedback.selectionClick(); _useGroup(g); },
+                    onLongPress: () => _groupActions(g),
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(14, 11, 4, 11),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(g.name, style: TextStyle(fontSize: 17, color: p.label)),
+                        Text(g.members.join(s.isAr ? '، ' : ', '), maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13, color: p.secondary)),
+                      ]),
+                    ),
+                  ))),
+                Semantics(button: true, label: '${s.moreOptions} ${g.name}', excludeSemantics: true,
+                  child: CupertinoButton(
+                    padding: const EdgeInsetsDirectional.only(start: 6, end: 12),
+                    minimumSize: const Size(44, 44),
+                    onPressed: () => _groupActions(g),
+                    child: Container(
+                      width: 34, height: 34,
+                      decoration: BoxDecoration(color: p.accent.withValues(alpha: p.isDark ? .22 : .12), shape: BoxShape.circle),
+                      child: Icon(CupertinoIcons.ellipsis, color: p.accent, size: 20),
+                    ),
+                  )),
+              ]),
           ]),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
@@ -293,13 +303,22 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
     );
   }
 
+  /// Tap a group → "Who's here today?" → names page with the ticked people (and you).
+  Future<void> _useGroup(FriendGroup g) async {
+    final me = ref.read(myNameProvider).trim();
+    final picked = await pickGroupMembers(context, ref, g, hide: {if (me.isNotEmpty) me});
+    if (picked == null || !mounted) return;
+    final withMe = [if (me.isNotEmpty) me, ...picked.where((m) => m.trim().toLowerCase() != me.toLowerCase())];
+    ref.read(wizardProvider.notifier).useGroup(FriendGroup(g.name, withMe));
+  }
+
   Future<void> _groupActions(FriendGroup g) async {
     final s = ref.read(stringsProvider);
     final a = await showGroupActions(context, s, g);
     if (!mounted || a == null) return;
     switch (a) {
       case GroupAction.use:
-        ref.read(wizardProvider.notifier).useGroup(g);
+        await _useGroup(g);
       case GroupAction.edit:
         await openGroupEditor(context, g);
       case GroupAction.delete:
@@ -393,12 +412,15 @@ class _NamesPageState extends ConsumerState<NamesPage> {
     final s = ref.read(stringsProvider);
     final g = await pickSavedGroup(context, ref);
     if (g == null || !mounted) return;
+    final me = ref.read(myNameProvider).trim();
+    final picked = await pickGroupMembers(context, ref, g, hide: {if (me.isNotEmpty) me});
+    if (picked == null || !mounted) return;
     final have = {
       if (_includeMe && _me.text.trim().isNotEmpty) _me.text.trim().toLowerCase(),
       for (final c in _rows) if (c.text.trim().isNotEmpty) c.text.trim().toLowerCase(),
     };
     final fresh = <String>[];
-    for (final m in g.members) {
+    for (final m in picked) {
       final k = m.trim().toLowerCase();
       if (k.isEmpty || have.contains(k)) continue;
       have.add(k);

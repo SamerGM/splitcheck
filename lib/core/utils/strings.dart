@@ -141,7 +141,6 @@ class S {
   String get tipQuestion => _t('Leaving a tip? 💸', 'في بقشيش؟ 💸');
   String get noTipChip => _t('No tip', 'لا');
   String get typeTip => _t('Type the tip %', 'اكتب نسبة البقشيش');
-  String get noTip => _t('No tip ✓', 'بدون بقشيش ✓');
   String tipApplied(String pct) => _t('Tip $pct ✓', 'بقشيش $pct ✓');
 
   // ── New features ───────────────────────────────────────────────────────────
@@ -236,7 +235,12 @@ class S {
   String get deleteGroupNote => _t('The group is removed. Past bills are kept.', 'هتتحذف المجموعة. الفواتير القديمة هتفضل موجودة.');
   String get savedGroupsFooter => _t('Saved groups appear in “How many people?” and “Who’s splitting?”.',
       'المجموعات المحفوظة بتظهر في «كام شخص؟» و«مين بيقسم؟».');
-  String get holdForOptions => _t('Press and hold a group for more options', 'اضغط مطوّلاً على المجموعة لخيارات أكتر');
+  String get whosHereToday => _t('Who’s here today?', 'مين موجود النهارده؟');
+  String untickHint(String group) => _t('$group · untick anyone who isn’t coming', '$group · شيل علامة اللي مش جاي');
+  String addNPeople(int n) => _t('Add $n ${n == 1 ? 'person' : 'people'}', 'أضف ${toArabicDigits('$n')} ${n == 1 ? 'شخص' : (n == 2 ? 'شخصين' : 'أشخاص')}');
+  String get notToday => _t('not today', 'مش النهارده');
+  String get moreOptions => _t('More options', 'خيارات أكتر');
+  String get holdForOptions => _t('Tap ⋯ to edit or delete a group', 'دوس ⋯ لتعديل أو حذف المجموعة');
   String get allAlreadyAdded => _t('Everyone in this group is already in the list', 'كل اللي في المجموعة موجودين بالفعل');
   String addedFromGroup(int n) => _t('Added $n from the group', 'اتضاف ${toArabicDigits('$n')} من المجموعة');
   String get noGroupsYet => _t('No groups yet — they’re saved after you add people.', 'لسه مفيش مجموعات — بتتحفظ بعد ما تضيف الأشخاص.');
@@ -336,11 +340,14 @@ class S {
   String get looksGoodNext => _t('Looks good →', 'تمام ←');
 
   // Charges
-  String get tipHint => _t('Shared by what each person ordered', 'بيتقسم حسب طلب كل واحد');
+  String get tipHint => _t('Split equally between everyone', 'بيتقسم بالتساوي على الكل');
   String get noneOpt => _t('None', 'لا');
   String get otherPct => _t('Other %…', 'نسبة تانية…');
   String get deliveryTitle => _t('Delivery fee 🛵', 'رسوم التوصيل 🛵');
-  String get deliveryEqualHint => _t('Split equally — everyone gets the same delivery', 'بتتقسم بالتساوي — التوصيل للكل');
+  String get deliveryEqualHint => _t('Split equally between everyone', 'بتتقسم بالتساوي على الكل');
+  String get noTip => _t('No tip', 'مفيش بقشيش');
+  String get otherAmount => _t('Other amount…', 'مبلغ تاني…');
+  String get nextBtn => _t('Next', 'التالي');
   String get noDeliveryFee => _t('No delivery fee', 'مفيش رسوم توصيل');
   String get percentage => _t('% Percentage', '٪ نسبة');
   String get applyBtn => _t('Apply', 'تطبيق');

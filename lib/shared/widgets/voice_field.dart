@@ -6,8 +6,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/services/parser_service.dart';
 import '../../core/services/providers.dart';
+import '../../core/utils/number_parser.dart';
 import '../theme/app_theme.dart';
 
 class VoiceField extends ConsumerStatefulWidget {
@@ -58,9 +58,16 @@ class _VoiceFieldState extends ConsumerState<VoiceField> {
       onResult: (text, isFinal) {
         if (!mounted) return;
         var t = text;
-        if (widget.numeric && isFinal) {
-          final n = parseNumber(text);
-          if (n != null) t = n == n.roundToDouble() ? n.toStringAsFixed(0) : '$n';
+        if (widget.numeric) {
+          // "ten" → 10 while you speak, not only at the end.
+          final n = parseSpokenNumber(text);
+          if (n != null) {
+            t = n == n.roundToDouble() ? n.toStringAsFixed(0) : '$n';
+          } else if (!isFinal) {
+            return;   // a half-heard word: keep what's in the field
+          } else {
+            t = widget.controller.text;
+          }
         }
         widget.controller.text = t;
         widget.controller.selection = TextSelection.collapsed(offset: t.length);

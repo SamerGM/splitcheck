@@ -122,6 +122,61 @@ Future<FriendGroup?> pickSavedGroup(BuildContext context, WidgetRef ref) {
   );
 }
 
+/// "Who's here today?" — every member ticked; untick who isn't at this bill.
+/// Returns the ticked names (for this bill only; the saved group is unchanged).
+/// Names in [hide] (e.g. your own name) aren't listed but are kept in the result.
+Future<List<String>?> pickGroupMembers(BuildContext context, WidgetRef ref, FriendGroup g,
+    {Set<String> hide = const {}}) {
+  final s = ref.read(stringsProvider);
+  final hidden = hide.map((e) => e.trim().toLowerCase()).toSet();
+  final shown = [for (final m in g.members) if (!hidden.contains(m.trim().toLowerCase())) m];
+  final kept = [for (final m in g.members) if (hidden.contains(m.trim().toLowerCase())) m];
+  final on = <String>{...shown};
+  return showAppleSheet<List<String>>(
+    context: context,
+    title: s.whosHereToday,
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
+      final p = Palette.of(ctx);
+      final n = on.length;
+      return Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(s.untickHint(g.name), textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: p.secondary)),
+        const SizedBox(height: 12),
+        Flexible(child: InsetGroup(inSheet: true, scrollable: true, separatorInset: 58, children: [
+          for (var i = 0; i < shown.length; i++)
+            Semantics(button: true, selected: on.contains(shown[i]), label: shown[i], excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () { HapticFeedback.selectionClick(); setSt(() => on.contains(shown[i]) ? on.remove(shown[i]) : on.add(shown[i])); },
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: on.contains(shown[i]) ? 1 : .5,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                    child: Row(children: [
+                      Avatar(person: Person(id: '$i', name: shown[i], color: personColor(i)), size: 34),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(shown[i], style: TextStyle(fontSize: 17, color: p.label,
+                            decoration: on.contains(shown[i]) ? null : TextDecoration.lineThrough)),
+                        if (!on.contains(shown[i]))
+                          Text(s.notToday, style: TextStyle(fontSize: 13, color: p.secondary)),
+                      ])),
+                      Icon(on.contains(shown[i]) ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+                          color: on.contains(shown[i]) ? p.green : p.tertiary, size: 26),
+                    ]),
+                  ),
+                ),
+              )),
+        ])),
+        const SizedBox(height: 14),
+        AppleButton(label: s.addNPeople(n), onTap: n == 0 && kept.isEmpty ? null
+            : () => Navigator.pop(ctx, [...kept, for (final m in shown) if (on.contains(m)) m])),
+        SecondaryButton(s.cancel, onTap: () => Navigator.pop(ctx)),
+      ]);
+    }),
+  );
+}
+
 /// Full-width grey button (kept local so this file doesn't depend on the wizard).
 class SecondaryButton extends StatelessWidget {
   final String label;
@@ -194,13 +249,28 @@ class _GroupEditorPageState extends ConsumerState<GroupEditorPage> {
           backgroundColor: p.barBg,
           border: Border(bottom: BorderSide(color: p.separator, width: .33)),
           previousPageTitle: s.back,
-          trailing: Semantics(button: true, label: s.saveBtn, excludeSemantics: true,
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: _valid ? _save : null,
-              child: Text(s.saveBtn, style: TextStyle(fontWeight: FontWeight.w600,
-                  color: _valid ? p.accent : p.tertiary)),
-            )),
+          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (g != null)
+              Semantics(button: true, label: s.delete, excludeSemantics: true,
+                child: CupertinoButton(
+                  padding: const EdgeInsetsDirectional.only(end: 16),
+                  onPressed: () async {
+                    if (await deleteGroupFlow(context, ref, g) && context.mounted) Navigator.pop(context);
+                  },
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(CupertinoIcons.trash, color: p.red, size: 19),
+                    const SizedBox(width: 4),
+                    Text(s.delete, style: TextStyle(color: p.red)),
+                  ]),
+                )),
+            Semantics(button: true, label: s.saveBtn, excludeSemantics: true,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: _valid ? _save : null,
+                child: Text(s.saveBtn, style: TextStyle(fontWeight: FontWeight.w600,
+                    color: _valid ? p.accent : p.tertiary)),
+              )),
+          ]),
         ),
         SliverPadding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, 40 + MediaQuery.of(context).padding.bottom),

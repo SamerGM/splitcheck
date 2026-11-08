@@ -194,10 +194,12 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
     final ctl = ref.read(wizardProvider.notifier);
     final people = ref.watch(billDraftProvider).people;
     final items = ref.watch(billDraftProvider).items;
-    final used = {
-      for (var i = 0; i < items.length; i++) if (i != widget.index) items[i].name.toLowerCase(),
-    };
-    final suggestions = [for (final l in s.itemSuggestions) if (!used.contains(_plain(l).toLowerCase())) l];
+    // All suggestions stay; picking one that's already on the bill makes "Pizza 2".
+    int already(String base) => [
+      for (var i = 0; i < items.length; i++)
+        if (i != widget.index && baseItemName(items[i].name).toLowerCase() == base.toLowerCase()) i,
+    ].length;
+    final suggestions = s.itemSuggestions;
     final everyone = _who.length == people.length;
     final single = w.nav.single;
     final price = _priceValue;
@@ -222,8 +224,11 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
         const SizedBox(height: 10),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (final l in suggestions)
-            Pill(label: l, soft: true, on: _name.text.trim() == _plain(l),
-                onTap: () => setState(() => _name.text = _plain(l))),
+            Pill(label: l, soft: true, on: baseItemName(_name.text) == _plain(l),
+                onTap: () => setState(() {
+                  final n = already(_plain(l));
+                  _name.text = n == 0 ? _plain(l) : '${_plain(l)} ${s.n(n + 1)}';
+                })),
         ]),
         SectionLabel(s.priceLabel),
         VoiceField(controller: _price, placeholder: '0', numeric: true,

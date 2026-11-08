@@ -21,6 +21,12 @@ const _arOnes = {
   'أحد عشر': 11, 'احد عشر': 11, 'اثنا عشر': 12, 'اثني عشر': 12,
   'ثلاثة عشر': 13, 'أربعة عشر': 14, 'خمسة عشر': 15,
   'ستة عشر': 16, 'سبعة عشر': 17, 'ثمانية عشر': 18, 'تسعة عشر': 19,
+  // Spoken / Egyptian & Gulf forms
+  'اتنين': 2, 'تلاتة': 3, 'تلاته': 3, 'ثلاث': 3, 'اربع': 4, 'خمس': 5, 'ست': 6, 'سبع': 7,
+  'تمانية': 8, 'تمانيه': 8, 'ثمان': 8, 'تسع': 9, 'عشره': 10, 'عشر': 10,
+  'خمسه': 5, 'سته': 6, 'سبعه': 7, 'تسعه': 9, 'اربعه': 4, 'ثلاثه': 3,
+  'حداشر': 11, 'اتناشر': 12, 'تلتاشر': 13, 'اربعتاشر': 14, 'خمستاشر': 15,
+  'ستاشر': 16, 'سبعتاشر': 17, 'تمنتاشر': 18, 'تسعتاشر': 19,
 };
 
 const _arTens = {
@@ -28,6 +34,7 @@ const _arTens = {
   'أربعون': 40, 'اربعين': 40, 'خمسون': 50, 'خمسين': 50,
   'ستون': 60, 'ستين': 60, 'سبعون': 70, 'سبعين': 70,
   'ثمانون': 80, 'ثمانين': 80, 'تسعون': 90, 'تسعين': 90,
+  'تلاتين': 30, 'تمانين': 80,
 };
 
 const _arHundreds = {
@@ -106,6 +113,9 @@ int? _parseEnglishNumber(String input) {
   return result == 0 ? null : result;
 }
 
+List<MapEntry<String, int>> _byLength(Map<String, int> m) =>
+    m.entries.toList()..sort((a, b) => b.key.length.compareTo(a.key.length));
+
 int? _parseArabicNumber(String input) {
   int result = 0;
   
@@ -117,11 +127,14 @@ int? _parseArabicNumber(String input) {
     }
   }
 
-  // Remove connectors
-  input = input.replaceAll(RegExp(r'و\s*'), '').trim();
+  // "واحد" starts with و, so take it out before removing the "و" connectors.
+  var one = 0;
+  if (RegExp(r'(^|\s)واحد(\s|$)').hasMatch(input)) { one = 1; input = input.replaceFirst('واحد', ' '); }
+  // Remove connectors ("خمسة وعشرين" → "خمسة عشرين")
+  input = input.replaceAll(RegExp(r'(^|\s)و\s*'), ' ').trim();
 
   // Check tens
-  for (final entry in _arTens.entries) {
+  for (final entry in _byLength(_arTens)) {
     if (input.contains(entry.key)) {
       result += entry.value;
       input = input.replaceFirst(entry.key, '').trim();
@@ -129,13 +142,63 @@ int? _parseArabicNumber(String input) {
   }
 
   // Check ones
-  for (final entry in _arOnes.entries) {
+  for (final entry in _byLength(_arOnes)) {
     if (input.contains(entry.key)) {
       result += entry.value;
       input = input.replaceFirst(entry.key, '').trim();
       break;
     }
   }
+  result += one;
 
   return result == 0 ? null : result;
+}
+
+/// Words people add around a spoken amount ("ten dirhams", "15 percent").
+final _fillers = RegExp(
+    r'\b(aed|egp|sar|usd|qar|kwd|bhd|omr|jod|dirhams?|dhs?|pounds?|riyals?|rials?|dollars?|bucks|dinars?|euros?|lira|percent|per cent|only|about|around|is|it|the|a|an)\b'
+    r'|درهم|دراهم|جنيه|جنيهات|ريال|دولار|دينار|بالمية|بالمئة|في المية|في المئة|بالمائة|تقريبا|بس|%');
+
+/// Turns what the microphone heard into a number: "ten" → 10, "Ten." → 10,
+/// "twenty five" → 25, "ten dirhams" → 10, "twelve point five" → 12.5,
+/// "١٥" → 15, "عشرة" → 10, "خمسة وعشرين" → 25. Returns null if there's no number.
+double? parseSpokenNumber(String input) {
+  var t = normalizeDigits(input.toLowerCase().trim())
+      .replaceAll('٫', '.')
+      .replaceAll(RegExp(r'(?<=\d),(?=\d{3}\b)'), '')   // 1,000 → 1000
+      .replaceAll(RegExp(r'(?<=\d),(?=\d)'), '.')        // 12,5 → 12.5
+      .replaceAll(_fillers, ' ')
+      .replaceAll(RegExp(r'[!?،,;:"]|\.(?!\d)'), ' ')    // punctuation, but keep 12.5
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (t.isEmpty) return null;
+
+  final direct = double.tryParse(t);
+  if (direct != null) return direct;
+
+  // "twelve point five" / "اتناشر فاصلة خمسة"
+  final pt = RegExp(r'\s(point|dot|فاصلة|فاصله)\s').firstMatch(' $t ');
+  if (pt != null) {
+    final whole = parseSpokenNumber(t.substring(0, pt.start).trim());
+    final fracWords = t.substring(pt.end - 1).trim();
+    final frac = RegExp(r'^\d+$').hasMatch(fracWords)
+        ? fracWords
+        : fracWords.split(' ').map((w) => _enOnes[w] ?? _arOnes[w]).whereType<int>().join();
+    if (whole != null && frac.isNotEmpty) return double.tryParse('${whole.toStringAsFixed(0)}.$frac');
+  }
+
+  // Digits mixed with words: "10 and a half" → 10, "about 15" → 15
+  final m = RegExp(r'\d+(?:\.\d+)?').firstMatch(t);
+  if (m != null) return double.tryParse(m.group(0)!);
+
+  // English words; unknown words are ignored as long as one number word is there.
+  final en = t.split(RegExp(r'[\s-]+')).where((w) =>
+      _enOnes.containsKey(w) || _enTens.containsKey(w) || w == 'hundred' || w == 'thousand').join(' ');
+  if (en.isNotEmpty) {
+    final v = _parseEnglishNumber(en);
+    if (v != null) return v.toDouble();
+  }
+
+  final ar = _parseArabicNumber(t);
+  return ar?.toDouble();
 }
