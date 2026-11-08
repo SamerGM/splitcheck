@@ -22,6 +22,8 @@ class VoiceField extends ConsumerStatefulWidget {
   final bool autofocus;
   final bool large;                  // big number style (VAT box, prices)
   final Color? fill;
+  final FocusNode? focusNode;
+  final TextInputAction? textInputAction;   // keyboard key: Next / Done
 
   const VoiceField({
     super.key,
@@ -36,6 +38,8 @@ class VoiceField extends ConsumerStatefulWidget {
     this.autofocus = false,
     this.large = false,
     this.fill,
+    this.focusNode,
+    this.textInputAction,
   });
 
   @override ConsumerState<VoiceField> createState() => _VoiceFieldState();
@@ -102,6 +106,8 @@ class _VoiceFieldState extends ConsumerState<VoiceField> {
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: widget.large ? 10 : 13),
             decoration: null,
             autofocus: widget.autofocus,
+            focusNode: widget.focusNode,
+            textInputAction: widget.textInputAction,
             keyboardType: widget.numeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
             textCapitalization: widget.numeric ? TextCapitalization.none : TextCapitalization.sentences,
             onChanged: widget.onChanged,

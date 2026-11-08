@@ -202,9 +202,15 @@ class _GroupEditorPageState extends ConsumerState<GroupEditorPage> {
     for (final m in widget.group?.members ?? const ['', '']) TextEditingController(text: m),
   ];
 
+  final Map<TextEditingController, FocusNode> _focus = {};
+  FocusNode _f(TextEditingController c) => _focus.putIfAbsent(c, FocusNode.new);
+  void _nextFrom(int i) => i + 1 < _members.length
+      ? _f(_members[i + 1]).requestFocus() : FocusScope.of(context).unfocus();
+
   @override
   void dispose() {
     _name.dispose();
+    for (final f in _focus.values) { f.dispose(); }
     for (final c in _members) { c.dispose(); }
     super.dispose();
   }
@@ -276,7 +282,8 @@ class _GroupEditorPageState extends ConsumerState<GroupEditorPage> {
           padding: EdgeInsets.fromLTRB(16, 0, 16, 40 + MediaQuery.of(context).padding.bottom),
           sliver: SliverList.list(children: [
             label(s.groupName),
-            VoiceField(controller: _name, placeholder: s.groupNameHint, onChanged: (_) => setState(() {})),
+            VoiceField(controller: _name, placeholder: s.groupNameHint, onChanged: (_) => setState(() {}),
+                textInputAction: TextInputAction.next, onSubmitted: (_) => _nextFrom(-1)),
             const SizedBox(height: 10),
             Wrap(spacing: 8, runSpacing: 8, children: [
               for (final sug in s.groupSuggestions)
@@ -295,6 +302,9 @@ class _GroupEditorPageState extends ConsumerState<GroupEditorPage> {
                 Expanded(child: VoiceField(
                   controller: _members[i],
                   placeholder: s.memberHint,
+                  focusNode: _f(_members[i]),
+                  textInputAction: i + 1 < _members.length ? TextInputAction.next : TextInputAction.done,
+                  onSubmitted: (_) => _nextFrom(i),
                   onChanged: (_) => setState(() {}),
                   trailing: CupertinoButton(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -308,7 +318,7 @@ class _GroupEditorPageState extends ConsumerState<GroupEditorPage> {
                   minimumSize: const Size(32, 36),
                   onPressed: _members.length <= 1 ? null : () {
                     HapticFeedback.selectionClick();
-                    setState(() => _members.removeAt(i).dispose());
+                    setState(() { final c = _members.removeAt(i); _focus.remove(c)?.dispose(); c.dispose(); });
                   },
                   child: Icon(CupertinoIcons.minus_circle,
                       color: _members.length <= 1 ? p.tertiary : p.red, size: 24),

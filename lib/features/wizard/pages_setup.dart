@@ -337,6 +337,19 @@ class NamesPage extends ConsumerStatefulWidget {
 class _NamesPageState extends ConsumerState<NamesPage> {
   final List<TextEditingController> _rows = [];
   late final TextEditingController _me;
+  // Keyboard "Next" jumps from one name to the next.
+  final _meFocus = FocusNode();
+  final Map<TextEditingController, FocusNode> _focus = {};
+  FocusNode _f(TextEditingController c) => _focus.putIfAbsent(c, FocusNode.new);
+
+  /// Next on the keyboard: go to the next person's field; on the last one, close the keyboard.
+  void _nextFrom(int i) {
+    if (i + 1 < _rows.length) {
+      _f(_rows[i + 1]).requestFocus();
+    } else {
+      FocusScope.of(context).unfocus();
+    }
+  }
   bool _includeMe = true;
 
   @override
@@ -365,6 +378,8 @@ class _NamesPageState extends ConsumerState<NamesPage> {
   @override
   void dispose() {
     for (final c in _rows) { c.dispose(); }
+    for (final f in _focus.values) { f.dispose(); }
+    _meFocus.dispose();
     _me.dispose();
     super.dispose();
   }
@@ -381,7 +396,7 @@ class _NamesPageState extends ConsumerState<NamesPage> {
         _rows.add(TextEditingController());
       } else {
         final i = _rows.lastIndexWhere((c) => c.text.trim().isEmpty);
-        if (i >= 0 && _rows.length > 1) _rows.removeAt(i).dispose();
+        if (i >= 0 && _rows.length > 1) { final c = _rows.removeAt(i); _focus.remove(c)?.dispose(); c.dispose(); }
       }
     });
   }
@@ -504,6 +519,9 @@ class _NamesPageState extends ConsumerState<NamesPage> {
               const SizedBox(width: 10),
               Expanded(child: VoiceField(
                 controller: _me, placeholder: s.yourName, fill: p.fill,
+                focusNode: _meFocus,
+                textInputAction: _rows.isEmpty ? TextInputAction.done : TextInputAction.next,
+                onSubmitted: (_) => _nextFrom(-1),
                 onChanged: (_) => setState(() {}),
               )),
             ]),
@@ -525,6 +543,9 @@ class _NamesPageState extends ConsumerState<NamesPage> {
               child: VoiceField(
                 controller: _rows[i],
                 placeholder: s.personN(i + 1),
+                focusNode: _f(_rows[i]),
+                textInputAction: i + 1 < _rows.length ? TextInputAction.next : TextInputAction.done,
+                onSubmitted: (_) => _nextFrom(i),
                 onChanged: (_) => setState(() {}),
                 trailing: CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -539,7 +560,7 @@ class _NamesPageState extends ConsumerState<NamesPage> {
               minimumSize: const Size(32, 36),
               onPressed: _rows.length + _offset <= 1 ? null : () {
                 HapticFeedback.selectionClick();
-                setState(() => _rows.removeAt(i).dispose());
+                setState(() { final c = _rows.removeAt(i); _focus.remove(c)?.dispose(); c.dispose(); });
               },
               child: Icon(CupertinoIcons.minus_circle, color: _rows.length + _offset <= 1 ? p.tertiary : p.red, size: 24),
             ),
@@ -548,7 +569,11 @@ class _NamesPageState extends ConsumerState<NamesPage> {
         ],
         Row(children: [
           Expanded(child: _AddButton(icon: CupertinoIcons.plus_circle_fill, label: s.addPerson,
-              onTap: () => setState(() => _rows.add(TextEditingController())))),
+              onTap: () {
+                final c = TextEditingController();
+                setState(() => _rows.add(c));
+                WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _f(c).requestFocus(); });
+              })),
           const SizedBox(width: 10),
           Expanded(child: _AddButton(icon: CupertinoIcons.person_3_fill, label: s.addSavedGroup,
               onTap: _addSavedGroup)),

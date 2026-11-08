@@ -152,6 +152,7 @@ class ItemEntryPage extends ConsumerStatefulWidget {
 class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
   final _name = TextEditingController();
   final _price = TextEditingController();
+  final _priceFocus = FocusNode();
   late Set<String> _who;
 
   @override
@@ -171,7 +172,7 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
   }
 
   @override
-  void dispose() { _name.dispose(); _price.dispose(); super.dispose(); }
+  void dispose() { _name.dispose(); _price.dispose(); _priceFocus.dispose(); super.dispose(); }
 
   double? get _priceValue {
     final v = double.tryParse(normalizeDigits(_price.text.trim()).replaceAll(',', '.'));
@@ -220,7 +221,8 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
           name: _name.text, price: _priceValue!, whoIds: [for (final x in people) if (_who.contains(x.id)) x.id]),
       children: [
         SectionLabel(s.editName),
-        VoiceField(controller: _name, placeholder: s.whatOrdered, onChanged: (_) => setState(() {})),
+        VoiceField(controller: _name, placeholder: s.whatOrdered, onChanged: (_) => setState(() {}),
+            textInputAction: TextInputAction.next, onSubmitted: (_) => _priceFocus.requestFocus()),
         const SizedBox(height: 10),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (final l in suggestions)
@@ -231,7 +233,8 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
                 })),
         ]),
         SectionLabel(s.priceLabel),
-        VoiceField(controller: _price, placeholder: '0', numeric: true,
+        VoiceField(controller: _price, placeholder: '0', numeric: true, focusNode: _priceFocus,
+            textInputAction: TextInputAction.done,
             prefixText: currencySymbol(ref.watch(currencyProvider), arabic: s.isAr), onChanged: (_) => setState(() {})),
         SectionLabel(s.whoShared),
         Wrap(spacing: 8, runSpacing: 8, children: [
