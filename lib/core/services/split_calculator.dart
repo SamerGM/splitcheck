@@ -5,9 +5,9 @@ import '../models/models.dart';
 import '../utils/currency.dart';
 
 /// Pure calculation — no Flutter, no async, no dependencies.
-/// Proportional allocation: whoever ordered more pays more of the
-/// discount, VAT, service and tip. The delivery fee is split equally —
-/// everyone gets the same delivery.
+/// Proportional allocation: whoever ordered more pays more of the discount,
+/// VAT and service. The delivery fee and the tip are split equally between
+/// everyone ("÷3 persons").
 ///
 /// Person totals are rounded to the currency's smallest unit (cents, fils)
 /// so they always add up exactly to the grand total, or rounded *up* to
@@ -43,6 +43,7 @@ class SplitCalculator {
     final svcAmt   = extras.serviceAmount(sub);
     final tipAmt   = extras.tipAmount(sub);
     final delivery = people.isEmpty ? 0.0 : extras.deliveryFee / people.length;
+    final tipEach  = people.isEmpty ? 0.0 : tipAmt / people.length;
 
     // ── Step 3: proportional allocation ──
     final totalSub = personSubs.values.fold(0.0, (a, b) => a + b);
@@ -51,7 +52,7 @@ class SplitCalculator {
     for (final p in people) {
       final pSub  = personSubs[p.id] ?? 0.0;
       final ratio = totalSub > 0 ? pSub / totalSub : 1.0 / people.length;
-      final s = (discAmt * ratio, vatAmt * ratio, svcAmt * ratio, tipAmt * ratio, delivery);
+      final s = (discAmt * ratio, vatAmt * ratio, svcAmt * ratio, tipEach, delivery);
       shares.add(s);
       exact.add(pSub - s.$1 + s.$2 + s.$3 + s.$4 + s.$5);
     }

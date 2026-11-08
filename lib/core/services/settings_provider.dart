@@ -166,6 +166,18 @@ class GroupsNotifier extends Notifier<List<FriendGroup>> {
     await ref.read(settingsServiceProvider).saveGroups(list);
   }
 
+  /// Replaces the group called [oldName] (keeps its position), e.g. after editing.
+  Future<void> replace(String oldName, String name, List<String> members) async {
+    final clean = [for (final m in members) if (m.trim().isNotEmpty) m.trim()];
+    final list = [...state];
+    final i = list.indexWhere((g) => g.name == oldName);
+    list.removeWhere((g) => g.name == oldName || g.name.toLowerCase() == name.trim().toLowerCase());
+    final g = FriendGroup(name.trim(), clean);
+    list.insert(i < 0 ? 0 : i.clamp(0, list.length), g);
+    state = list;
+    await ref.read(settingsServiceProvider).saveGroups(list);
+  }
+
   bool exists(List<String> names) => state.any((g) => g.sameMembers(names));
 }
 

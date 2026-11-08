@@ -16,6 +16,7 @@ import '../../core/utils/number_parser.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
 import '../../shared/widgets/voice_field.dart';
+import '../groups/group_widgets.dart' hide SecondaryButton;
 import 'wizard_controller.dart';
 import 'wizard_widgets.dart';
 
@@ -77,10 +78,11 @@ class _PricesIncludedPageState extends ConsumerState<PricesIncludedPage> {
       title: s.pricesFinalQ,
       subtitle: s.pricesFinalHint,
       children: [
-        OptionCard(emoji: '✅', title: s.yesIncluded, hint: s.yesIncludedHint,
-            selected: _picked && _included, onTap: () => _choose(true)),
-        OptionCard(emoji: '➕', title: s.noAddOnTop, hint: s.noAddOnTopHint,
+        OptionCard(emoji: '', leading: VatBadge(label: s.vatBadge),
+            title: s.vatWillBeAdded, hint: s.vatWillBeAddedHint,
             selected: _picked && !_included, onTap: () => _choose(false)),
+        OptionCard(emoji: '✅', title: s.pricesAreFinal, hint: s.pricesAreFinalHint,
+            selected: _picked && _included, onTap: () => _choose(true)),
       ],
     );
   }
@@ -268,6 +270,7 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
                 child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: () { HapticFeedback.selectionClick(); ref.read(wizardProvider.notifier).useGroup(g); },
+                onLongPress: () => _groupActions(g),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                   child: Row(children: [
@@ -281,9 +284,27 @@ class _PeopleCountPageState extends ConsumerState<PeopleCountPage> {
                 ),
               )),
           ]),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+            child: Text(s.holdForOptions, style: TextStyle(fontSize: 13, color: p.secondary)),
+          ),
         ],
       ],
     );
+  }
+
+  Future<void> _groupActions(FriendGroup g) async {
+    final s = ref.read(stringsProvider);
+    final a = await showGroupActions(context, s, g);
+    if (!mounted || a == null) return;
+    switch (a) {
+      case GroupAction.use:
+        ref.read(wizardProvider.notifier).useGroup(g);
+      case GroupAction.edit:
+        await openGroupEditor(context, g);
+      case GroupAction.delete:
+        await deleteGroupFlow(context, ref, g);
+    }
   }
 }
 
@@ -364,6 +385,38 @@ class _NamesPageState extends ConsumerState<NamesPage> {
   Future<void> _pickContact(TextEditingController c) async {
     final name = await ContactsService.pickName();
     if (name != null && mounted) setState(() => c.text = name);
+  }
+
+  /// Adds a saved group's people: fills empty rows first, then appends;
+  /// names already on the list (you included) are skipped.
+  Future<void> _addSavedGroup() async {
+    final s = ref.read(stringsProvider);
+    final g = await pickSavedGroup(context, ref);
+    if (g == null || !mounted) return;
+    final have = {
+      if (_includeMe && _me.text.trim().isNotEmpty) _me.text.trim().toLowerCase(),
+      for (final c in _rows) if (c.text.trim().isNotEmpty) c.text.trim().toLowerCase(),
+    };
+    final fresh = <String>[];
+    for (final m in g.members) {
+      final k = m.trim().toLowerCase();
+      if (k.isEmpty || have.contains(k)) continue;
+      have.add(k);
+      fresh.add(m.trim());
+    }
+    setState(() {
+      for (final name in fresh) {
+        final empty = _rows.indexWhere((c) => c.text.trim().isEmpty);
+        if (empty >= 0) {
+          _rows[empty].text = name;
+        } else {
+          _rows.add(TextEditingController(text: name));
+        }
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(fresh.isEmpty ? s.allAlreadyAdded : s.addedFromGroup(fresh.length)),
+        duration: const Duration(seconds: 2)));
   }
 
   Future<void> _saveGroup() async {
@@ -471,20 +524,41 @@ class _NamesPageState extends ConsumerState<NamesPage> {
           ]),
           const SizedBox(height: 10),
         ],
-        PressableScale(
-          onTap: () { HapticFeedback.selectionClick(); setState(() => _rows.add(TextEditingController())); },
-          child: Container(
-            height: 50,
-            decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(12)),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(CupertinoIcons.plus_circle_fill, color: p.accent, size: 22),
-              const SizedBox(width: 8),
-              Text(s.addPerson, style: TextStyle(fontSize: 17, color: p.accent, fontWeight: FontWeight.w500)),
-            ]),
-          ),
-        ),
+        Row(children: [
+          Expanded(child: _AddButton(icon: CupertinoIcons.plus_circle_fill, label: s.addPerson,
+              onTap: () => setState(() => _rows.add(TextEditingController())))),
+          const SizedBox(width: 10),
+          Expanded(child: _AddButton(icon: CupertinoIcons.person_3_fill, label: s.addSavedGroup,
+              onTap: _addSavedGroup)),
+        ]),
         SecondaryButton(s.saveAsGroupBtn, onTap: _saveGroup),
       ],
     );
+  }
+}
+
+class _AddButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _AddButton({required this.icon, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    return Semantics(button: true, label: label, excludeSemantics: true,
+      child: PressableScale(
+        onTap: () { HapticFeedback.selectionClick(); onTap(); },
+        child: Container(
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(12)),
+          child: FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, color: p.accent, size: 20),
+            const SizedBox(width: 6),
+            Text(label, maxLines: 1,
+                style: TextStyle(fontSize: 16, color: p.accent, fontWeight: FontWeight.w500)),
+          ])),
+        ),
+      ));
   }
 }

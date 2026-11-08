@@ -220,7 +220,25 @@ class S {
   String get noThanks => _t('No thanks', 'لا شكراً');
   String get askGroupName => _t('What should I call this group?', 'تحب تسمي المجموعة إيه؟');
   String groupSaved(String name) => _t('Group “$name” saved ✓', 'اتحفظت مجموعة «$name» ✓');
-  String get friendGroups => _t('Friend groups', 'مجموعات الأصحاب');
+  String get friendGroups => _t('Saved groups', 'المجموعات المحفوظة');
+  // Saved groups: actions, editor, settings
+  String get useThisGroup => _t('Use this group', 'استخدم المجموعة دي');
+  String get editGroup => _t('Edit group', 'تعديل المجموعة');
+  String get deleteGroup => _t('Delete group', 'حذف المجموعة');
+  String get newGroup => _t('New group', 'مجموعة جديدة');
+  String get addSavedGroup => _t('Add saved group', 'إضافة مجموعة محفوظة');
+  String get groupName => _t('Group name', 'اسم المجموعة');
+  String get members => _t('Members', 'الأعضاء');
+  String get addMember => _t('Add member', 'إضافة عضو');
+  String get memberHint => _t('Name', 'الاسم');
+  String get delete => _t('Delete', 'حذف');
+  String deleteGroupQ(String name) => _t('Delete “$name”?', 'حذف «$name»؟');
+  String get deleteGroupNote => _t('The group is removed. Past bills are kept.', 'هتتحذف المجموعة. الفواتير القديمة هتفضل موجودة.');
+  String get savedGroupsFooter => _t('Saved groups appear in “How many people?” and “Who’s splitting?”.',
+      'المجموعات المحفوظة بتظهر في «كام شخص؟» و«مين بيقسم؟».');
+  String get holdForOptions => _t('Press and hold a group for more options', 'اضغط مطوّلاً على المجموعة لخيارات أكتر');
+  String get allAlreadyAdded => _t('Everyone in this group is already in the list', 'كل اللي في المجموعة موجودين بالفعل');
+  String addedFromGroup(int n) => _t('Added $n from the group', 'اتضاف ${toArabicDigits('$n')} من المجموعة');
   String get noGroupsYet => _t('No groups yet — they’re saved after you add people.', 'لسه مفيش مجموعات — بتتحفظ بعد ما تضيف الأشخاص.');
 
   // ── Items ──────────────────────────────────────────────────────────────────
@@ -256,11 +274,12 @@ class S {
 
   // Prices final?
   String get pricesFinalQ => _t('Are the menu prices final?', 'أسعار المنيو نهائية؟');
-  String get pricesFinalHint => _t('Do they already include VAT and service charge?', 'يعني شاملة الضريبة والخدمة؟');
-  String get yesIncluded => _t('Yes — already included', 'أيوه — شاملة');
-  String get yesIncludedHint => _t('Prices are final — nothing will be added', 'الأسعار نهائية — مش هنزوّد حاجة');
-  String get noAddOnTop => _t('No — add them on top', 'لا — تتضاف عليها');
-  String get noAddOnTopHint => _t('VAT and service will be added to the bill', 'الضريبة والخدمة هتتضاف على الفاتورة');
+  String get pricesFinalHint => _t('Do they already include VAT/Tax and service charge?', 'هل تشمل الضريبة ورسوم الخدمة؟');
+  String get vatWillBeAdded => _t('VAT/Tax will be added to the bill', 'الضريبة هتتضاف على الفاتورة');
+  String get vatWillBeAddedHint => _t('Menu prices + VAT/Tax and service', 'أسعار المنيو + الضريبة والخدمة');
+  String get pricesAreFinal => _t('Prices are final — don’t add VAT/Tax', 'الأسعار نهائية — متضيفش ضريبة');
+  String get pricesAreFinalHint => _t('You pay exactly what the menu says', 'هتدفع نفس اللي في المنيو بالظبط');
+  String get vatBadge => _t('+VAT', '+ضريبة');
   String get vatAndService => _t('VAT & service', 'الضريبة والخدمة');
   String get includedInPrices => _t('Included in prices', 'شاملة في الأسعار');
   String get pricesIncludeToggle => _t('Prices already include VAT & service', 'الأسعار شاملة الضريبة والخدمة');
@@ -394,6 +413,19 @@ class S {
   String get shareFooter => _t('Split with SplitCheck', 'تم التقسيم من خلال برنامج SplitCheck');
   String get billWord => _t('Bill split', 'تقسيم الفاتورة');
   String get sharedTag => _t('Shared', 'مشترك');
+  // Shared text / card
+  String get personsWord => _t('Persons', 'أشخاص');
+  String get roundUpWord => _t('round-up', 'تقريب');
+  String get roundUpRow => _t('Round-up', 'التقريب');
+  String get deliveryFeeLabel => _t('Delivery fee', 'رسوم التوصيل');
+  String get totalWord => _t('Total', 'الإجمالي');
+  String get totalAfterVat => _t('Total after VAT', 'الإجمالي بعد الضريبة');
+  String get itemsTotalLabel => _t('Items total', 'إجمالي الأصناف');
+  String get grandTotalWord => _t('Grand total', 'الإجمالي النهائي');
+  String get grandTotalAll => _t('Grand total after all additions + round-up', 'الإجمالي النهائي بعد كل الإضافات + التقريب');
+  String get inclWord => _t('incl.', 'شامل');
+  String get deliveryWord => _t('delivery', 'توصيل');
+  String get tipWord => _t('tip', 'بقشيش');
 
   // ── UI chrome ──────────────────────────────────────────────────────────────
   String get typeHint => _t('Message', 'اكتب رسالة');

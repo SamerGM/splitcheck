@@ -13,10 +13,11 @@ import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
 import '../../shared/widgets/voice_field.dart';
 import '../wizard/wizard_controller.dart';
+import '../groups/group_widgets.dart';
 import 'country_picker.dart';
 
 /// Full-screen Settings: language, appearance, default country (+ its VAT and
-/// service), your name and friend groups.
+/// service), your name and saved groups.
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
   @override ConsumerState<SettingsPage> createState() => _SettingsPageState();
@@ -163,33 +164,64 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             VoiceField(controller: _name, placeholder: s.yourName, onSubmitted: (_) => _saveName()),
 
             label(s.friendGroups),
-            if (groups.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(s.noGroupsYet, style: TextStyle(fontSize: 15, color: p.secondary)),
-              )
-            else
-              InsetGroup(separatorInset: 16, children: [
-                for (final g in groups)
-                  Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 4, 10),
-                    child: Row(children: [
-                      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(g.name, style: TextStyle(fontSize: 17, letterSpacing: -.4, color: p.label)),
-                        Text(g.members.join(s.isAr ? '، ' : ', '), maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 13, color: p.secondary)),
-                      ])),
-                      CupertinoButton(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          ref.read(groupsProvider.notifier).remove(g.name);
-                        },
-                        child: Icon(CupertinoIcons.trash, color: p.red, size: 20),
+            InsetGroup(separatorInset: 16, children: [
+              for (final g in groups)
+                Dismissible(
+                  key: ValueKey('group-${g.name}'),
+                  direction: Directionality.of(context) == TextDirection.rtl
+                      ? DismissDirection.startToEnd : DismissDirection.endToStart,
+                  confirmDismiss: (_) => deleteGroupFlow(context, ref, g),
+                  background: Container(
+                    color: p.red,
+                    alignment: AlignmentDirectional.centerEnd,
+                    padding: const EdgeInsetsDirectional.only(end: 20),
+                    child: Text(s.delete, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                  ),
+                  child: Semantics(button: true, label: g.name, excludeSemantics: true,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () { HapticFeedback.selectionClick(); openGroupEditor(context, g); },
+                      child: Padding(
+                        padding: const EdgeInsetsDirectional.fromSTEB(4, 8, 12, 8),
+                        child: Row(children: [
+                          CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: const Size(36, 36),
+                            onPressed: () => deleteGroupFlow(context, ref, g),
+                            child: Icon(CupertinoIcons.minus_circle_fill, color: p.red, size: 22),
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(g.name, style: TextStyle(fontSize: 17, letterSpacing: -.4, color: p.label)),
+                            Text(g.members.join(s.isAr ? '، ' : ', '), maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 13, color: p.secondary)),
+                          ])),
+                          Text(s.n(g.members.length), style: TextStyle(fontSize: 15, color: p.secondary)),
+                          const SizedBox(width: 6),
+                          Icon(CupertinoIcons.chevron_forward, color: p.tertiary, size: 16),
+                        ]),
                       ),
+                    ),
+                  ),
+                ),
+              Semantics(button: true, label: s.newGroup, excludeSemantics: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () { HapticFeedback.selectionClick(); openGroupEditor(context); },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                    child: Row(children: [
+                      Icon(CupertinoIcons.plus_circle_fill, color: p.green, size: 22),
+                      const SizedBox(width: 10),
+                      Text(s.newGroup, style: TextStyle(fontSize: 17, color: p.accent)),
                     ]),
                   ),
-              ]),
+                )),
+            ]),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+              child: Text(s.savedGroupsFooter, style: TextStyle(fontSize: 13, color: p.secondary)),
+            ),
           ]),
         ),
       ]),

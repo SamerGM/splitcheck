@@ -100,8 +100,9 @@ class OptionCard extends StatelessWidget {
   final String emoji, title, hint;
   final bool selected;
   final VoidCallback onTap;
+  final Widget? leading;   // replaces the emoji (e.g. the orange +VAT badge)
   const OptionCard({super.key, required this.emoji, required this.title, required this.hint,
-      required this.selected, required this.onTap});
+      required this.selected, required this.onTap, this.leading});
 
   @override
   Widget build(BuildContext context) {
@@ -122,7 +123,7 @@ class OptionCard extends StatelessWidget {
             border: Border.all(color: selected ? p.accent : Colors.transparent, width: 2),
           ),
           child: Row(children: [
-            Text(emoji, style: const TextStyle(fontSize: 40)),
+            leading ?? Text(emoji, style: const TextStyle(fontSize: 40)),
             const SizedBox(width: 16),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: p.label)),
@@ -134,6 +135,30 @@ class OptionCard extends StatelessWidget {
         ),
       ),
     ));
+  }
+}
+
+/// Orange rounded "+VAT" badge used as an option icon.
+class VatBadge extends StatelessWidget {
+  final String label;
+  const VatBadge({super.key, required this.label});
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    const orange = Color(0xFFFF9500);
+    return Container(
+      width: 48, height: 48,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: orange.withValues(alpha: p.isDark ? .24 : .14),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: orange, width: 1.5),
+      ),
+      child: FittedBox(child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: orange, letterSpacing: -.3)),
+      )),
+    );
   }
 }
 

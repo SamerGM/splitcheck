@@ -10,8 +10,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/models.dart';
+import '../../core/services/bill_breakdown.dart';
+import '../../core/services/share_text.dart';
 import '../../core/services/settings_provider.dart';
-import '../../core/utils/currency.dart';
 import '../../core/utils/strings.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
@@ -32,71 +33,36 @@ class _ResultCardState extends ConsumerState<ResultCard> {
   SplitResult get result => widget.result;
   Bill get bill => widget.bill;
 
-  String _fmt(S s, double v) {
-    final str = fmtAmount(v, bill.currency, arabic: s.isAr);
-    return s.isAr ? toArabicDigits(str) : str;
+  late BillBreakdown _bd = BillBreakdown.of(bill, result);
+
+  @override
+  void didUpdateWidget(covariant ResultCard old) {
+    super.didUpdateWidget(old);
+    if (old.bill != bill || old.result != result) _bd = BillBreakdown.of(bill, result);
   }
 
-  List<String> _assigned(BillItem it) {
-    final valid = it.personIds.where((id) => bill.people.any((p) => p.id == id)).toList();
-    return valid.isEmpty ? bill.people.map((p) => p.id).toList() : valid;
+  ShareFormatter _f(S s) => ShareFormatter(_bd, s);
+  String _shareText(S s) => _f(s).full();
+  String _personText(S s, PersonBreakdown pb) => _f(s).forPerson(pb);
+
+  /// Rows for the in-app breakdown of one person: (label, value, grey hint).
+  List<(String, String, String?)> _rows(S s, PersonBreakdown pb) {
+    final f = _f(s);
+    final n = s.n(_bd.count);
+    return [
+      for (final l in pb.items)
+        (f.itemLabel(l, pb), f.money(l.total),
+         (_bd.hasVat || _bd.hasService || l.discount >= 0.005)
+            ? [f.num(l.base),
+               if (l.discount >= 0.005) '− ${f.num(l.discount)} ${s.discountLabel}',
+               if (_bd.hasVat) '+ ${f.num(l.vat)} ${s.vatLabel}',
+               if (_bd.hasService) '+ ${f.num(l.service)} ${s.serviceLabel}'].join(' ')
+            : null),
+      if (_bd.deliveryFee > 0) ('${s.deliveryFeeLabel} ÷$n', f.money(pb.delivery), null),
+      if (_bd.tipAmount > 0) ('${s.tipLabel} ÷$n', f.money(pb.tip), null),
+      if (pb.roundUp > 0) (s.roundUpRow, '+${f.money(pb.roundUp)}', null),
+    ];
   }
-
-  List<BillItem> _itemsOf(Person person) =>
-      bill.items.where((it) => _assigned(it).contains(person.id)).toList();
-
-  /// This person's part of an item, respecting portions (e.g. 2 of 3 slices).
-  double _shareOf(BillItem it, Person person) {
-    final ids = _assigned(it);
-    final total = ids.fold<int>(0, (a, id) => a + it.portionsOf(id).clamp(1, 1000));
-    return it.price * it.portionsOf(person.id).clamp(1, 1000) / total;
-  }
-
-  String _itemLine(S s, BillItem it, Person person) {
-    final ids = _assigned(it);
-    final unequal = ids.any((id) => it.portionsOf(id) > 1);
-    if (unequal) {
-      // e.g. "Pizza ×3 · 2/3" — this person had 2 of 3 portions.
-      final total = ids.fold<int>(0, (a, id) => a + it.portionsOf(id).clamp(1, 1000));
-      return '${s.itemLabel(it.name, it.quantity)} · ${s.n(it.portionsOf(person.id))}/${s.n(total)}';
-    }
-    final label = s.itemLabel(it.name, it.quantity);
-    return ids.length > 1 ? '$label · ${s.sharedTag} ÷${s.n(ids.length)}' : label;
-  }
-
-  List<String> _personLines(S s, PersonResult pr) => [
-    for (final it in _itemsOf(pr.person)) '• ${_itemLine(s, it, pr.person)}: ${_fmt(s, _shareOf(it, pr.person))}',
-    if (pr.discountShare > 0) '• ${s.discountLabel}: −${_fmt(s, pr.discountShare)}',
-    if (pr.vatShare > 0)      '• ${s.vatLabel}: ${_fmt(s, pr.vatShare)}',
-    if (pr.serviceShare > 0)  '• ${s.serviceLabel}: ${_fmt(s, pr.serviceShare)}',
-    if (pr.tipShare > 0)      '• ${s.tipLabel}: ${_fmt(s, pr.tipShare)}',
-    if (pr.deliveryShare > 0) '• ${s.deliveryLabel}: ${_fmt(s, pr.deliveryShare)}',
-  ];
-
-  String _shareText(S s) {
-    final buf = StringBuffer()
-      ..writeln('🧾 ${bill.merchant.isNotEmpty ? bill.merchant : s.billWord}')
-      ..writeln();
-    for (final pr in result.personResults) {
-      buf.writeln('${pr.person.name}: ${_fmt(s, pr.total)}');
-      for (final l in _personLines(s, pr)) { buf.writeln('   $l'); }
-    }
-    buf
-      ..writeln()
-      ..writeln('${s.grandTotal}: ${_fmt(s, result.grandTotal)}');
-    if (result.roundingExtra > 0) buf.writeln('(${s.roundingLabel} +${_fmt(s, result.roundingExtra)})');
-    buf.writeln(s.shareFooter);
-    return buf.toString();
-  }
-
-  /// A personal message for one person — "Hi Sara 👋 your share is …".
-  String _personText(S s, PersonResult pr) => [
-    s.personMessage(pr.person.name, _fmt(s, pr.total), bill.merchant),
-    '',
-    ..._personLines(s, pr),
-    '',
-    s.shareFooter,
-  ].join('\n');
 
   Future<void> _share(S s) async {
     HapticFeedback.lightImpact();
@@ -116,9 +82,9 @@ class _ResultCardState extends ConsumerState<ResultCard> {
     }
   }
 
-  Future<void> _sendTo(S s, PersonResult pr) async {
+  Future<void> _sendTo(S s, PersonBreakdown pb) async {
     HapticFeedback.lightImpact();
-    await SharePlus.instance.share(ShareParams(text: _personText(s, pr), subject: s.billWord));
+    await SharePlus.instance.share(ShareParams(text: _personText(s, pb), subject: s.billWord));
   }
 
   Future<void> _copy(S s) async {
@@ -140,6 +106,7 @@ class _ResultCardState extends ConsumerState<ResultCard> {
     final s = ref.watch(stringsProvider);
     final p = Palette.of(context);
     final hasPhoto = bill.receiptPath != null && File(bill.receiptPath!).existsSync();
+    final f = _f(s);
 
     return Padding(
       padding: const EdgeInsets.only(top: 14, bottom: 8),
@@ -168,28 +135,25 @@ class _ResultCardState extends ConsumerState<ResultCard> {
                 Text(_dateLabel(s), style: TextStyle(fontSize: 13, color: p.secondary)),
               ]),
               const SizedBox(height: 18),
-              Text(s.grandTotal, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: p.secondary)),
-              const SizedBox(height: 2),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: AlignmentDirectional.centerStart,
-                child: Text(_fmt(s, result.grandTotal), style: TextStyle(
-                  fontSize: 40, fontWeight: FontWeight.w700, letterSpacing: -1.2, color: p.label)),
-              ),
-              if (result.roundingExtra > 0)
-                Text('${s.roundingLabel} +${_fmt(s, result.roundingExtra)}',
-                    style: TextStyle(fontSize: 13, color: p.secondary)),
-              const SizedBox(height: 16),
-              for (final pr in result.personResults)
+              _SummaryHeader(f: f),
+              const SizedBox(height: 14),
+              _TotalsBox(f: f),
+              const SizedBox(height: 10),
+              for (final pb in _bd.people)
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.symmetric(vertical: 7),
                   child: Row(children: [
-                    Avatar(person: pr.person, size: 32),
+                    Avatar(person: pb.person, size: 32),
                     const SizedBox(width: 12),
-                    Expanded(child: Text(pr.person.name, style: TextStyle(
-                      fontSize: 17, letterSpacing: -0.4, color: p.label))),
-                    Text(_fmt(s, pr.total), style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.4, color: p.label,
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(pb.person.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 17, letterSpacing: -0.4, color: p.label)),
+                      if (f.cardWorking(pb).isNotEmpty)
+                        Text(f.cardWorking(pb), style: TextStyle(fontSize: 12.5, color: p.secondary, height: 1.3)),
+                    ])),
+                    const SizedBox(width: 8),
+                    Text(f.amount(pb.rounded), style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w700, letterSpacing: -0.4, color: p.label,
                       fontFeatures: const [ui.FontFeature.tabularFigures()])),
                   ]),
                 ),
@@ -219,13 +183,13 @@ class _ResultCardState extends ConsumerState<ResultCard> {
         InsetGroup(
           header: s.breakdown,
           children: [
-            for (final pr in result.personResults)
+            for (final pb in _bd.people)
               _PersonRow(
-                pr: pr,
-                lines: _personLines(s, pr),
-                fmt: (v) => _fmt(s, v),
+                person: pb.person,
+                amount: f.amount(pb.rounded),
+                rows: _rows(s, pb),
                 sendLabel: s.sendToPerson,
-                onSend: () => _sendTo(s, pr),
+                onSend: () => _sendTo(s, pb),
               ),
           ],
         ),
@@ -271,12 +235,12 @@ class _Action extends StatelessWidget {
 }
 
 class _PersonRow extends StatefulWidget {
-  final PersonResult pr;
-  final List<String> lines;
-  final String Function(double) fmt;
+  final Person person;
+  final String amount;
+  final List<(String, String, String?)> rows;
   final String sendLabel;
   final VoidCallback onSend;
-  const _PersonRow({required this.pr, required this.lines, required this.fmt,
+  const _PersonRow({required this.person, required this.amount, required this.rows,
       required this.sendLabel, required this.onSend});
   @override State<_PersonRow> createState() => _PersonRowState();
 }
@@ -287,24 +251,20 @@ class _PersonRowState extends State<_PersonRow> {
   @override
   Widget build(BuildContext context) {
     final p  = Palette.of(context);
-    final pr = widget.pr;
 
-    Widget line(String text) {
-      // "• Label: value" → label on the left, value on the right.
-      final i = text.lastIndexOf(': ');
-      final label = i > 0 ? text.substring(2, i) : text;
-      final value = i > 0 ? text.substring(i + 2) : '';
-      final isDiscount = value.startsWith('−');
-      final color = isDiscount ? p.green : p.secondary;
-      return Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Row(children: [
-          Expanded(child: Text(label, style: TextStyle(fontSize: 15, color: color))),
-          Text(value, style: TextStyle(fontSize: 15, color: color,
+    Widget line((String, String, String?) r) => Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Text(r.$1, style: TextStyle(fontSize: 15, color: p.secondary))),
+          const SizedBox(width: 8),
+          Text(r.$2, style: TextStyle(fontSize: 15, color: p.secondary,
               fontFeatures: const [ui.FontFeature.tabularFigures()])),
         ]),
-      );
-    }
+        if (r.$3 != null)
+          Text(r.$3!, style: TextStyle(fontSize: 12.5, color: p.tertiary)),
+      ]),
+    );
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -313,10 +273,10 @@ class _PersonRowState extends State<_PersonRow> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         child: Column(children: [
           Row(children: [
-            Avatar(person: pr.person, size: 34),
+            Avatar(person: widget.person, size: 34),
             const SizedBox(width: 12),
-            Expanded(child: Text(pr.person.name, style: TextStyle(fontSize: 17, letterSpacing: -0.4, color: p.label))),
-            Text(widget.fmt(pr.total), style: TextStyle(
+            Expanded(child: Text(widget.person.name, style: TextStyle(fontSize: 17, letterSpacing: -0.4, color: p.label))),
+            Text(widget.amount, style: TextStyle(
               fontSize: 17, fontWeight: FontWeight.w600, letterSpacing: -0.4, color: p.label)),
             const SizedBox(width: 6),
             AnimatedRotation(
@@ -332,7 +292,7 @@ class _PersonRowState extends State<_PersonRow> {
             child: !_open ? const SizedBox(width: double.infinity) : Padding(
               padding: const EdgeInsetsDirectional.only(start: 46, top: 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                for (final l in widget.lines) line(l),
+                for (final r in widget.rows) line(r),
                 const SizedBox(height: 10),
                 PressableScale(
                   onTap: widget.onSend,
@@ -345,7 +305,7 @@ class _PersonRowState extends State<_PersonRow> {
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(CupertinoIcons.paperplane_fill, size: 15, color: p.accent),
                       const SizedBox(width: 6),
-                      Text('${widget.sendLabel} · ${pr.person.name}', style: TextStyle(
+                      Text('${widget.sendLabel} · ${widget.person.name}', style: TextStyle(
                         fontSize: 14, fontWeight: FontWeight.w600, color: p.accent)),
                     ]),
                   ),
@@ -355,6 +315,69 @@ class _PersonRowState extends State<_PersonRow> {
           ),
         ]),
       ),
+    );
+  }
+}
+
+/// "Grand total after all additions + round-up" and the big whole number.
+class _SummaryHeader extends StatelessWidget {
+  final ShareFormatter f;
+  const _SummaryHeader({required this.f});
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final b = f.b;
+    final full = f.amount(b.grandTotal);
+    final i = full.lastIndexOf(' ');
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(f.grandLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: p.secondary)),
+      const SizedBox(height: 2),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: AlignmentDirectional.centerStart,
+        child: Text.rich(TextSpan(children: [
+          TextSpan(text: full.substring(0, i), style: TextStyle(
+              fontSize: 44, fontWeight: FontWeight.w700, letterSpacing: -1.3, color: p.label)),
+          TextSpan(text: ' ${full.substring(i + 1)}', style: TextStyle(
+              fontSize: 20, fontWeight: FontWeight.w600, color: p.secondary)),
+        ])),
+      ),
+    ]);
+  }
+}
+
+/// Total after VAT → + delivery → + tip → + round-up → Grand total (only rows that exist).
+class _TotalsBox extends StatelessWidget {
+  final ShareFormatter f;
+  const _TotalsBox({required this.f});
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    final b = f.b;
+    final s = f.s;
+    Widget row(String l, String v, {bool bold = false}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(children: [
+        Expanded(child: Text(l, style: TextStyle(fontSize: bold ? 15 : 14,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w400, color: bold ? p.label : p.secondary))),
+        Text(v, style: TextStyle(fontSize: bold ? 15 : 14, fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+            color: p.label, fontFeatures: const [ui.FontFeature.tabularFigures()])),
+      ]),
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+      decoration: BoxDecoration(color: p.fill, borderRadius: BorderRadius.circular(14)),
+      child: Column(children: [
+        row(f.totalAfterVatLabel, f.money(b.totalAfterVat)),
+        if (b.deliveryFee > 0) row('+ ${s.deliveryFeeLabel}', f.num(b.deliveryFee)),
+        if (b.tipAmount > 0) row('+ ${s.tipLabel}', f.num(b.tipAmount)),
+        if (b.roundUp > 0) row('+ ${s.roundUpRow}', f.num(b.roundUp)),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Divider(height: 1, thickness: .5, color: p.separator),
+        ),
+        row(s.grandTotalWord, f.amount(b.grandTotal), bold: true),
+      ]),
     );
   }
 }
