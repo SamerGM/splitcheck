@@ -3,6 +3,7 @@
 // Building blocks shared by every full-screen page: the page layout (title,
 // content, Back + main button), option cards, number grids and pills.
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +24,8 @@ class WizardPage extends ConsumerWidget {
   final VoidCallback? onPrimary;  // null = disabled
   final bool showBack;
   final bool centered;            // centred hero layout (VAT page, round-up)
+  /// Shown on top of the keyboard while typing (in place of the footer), e.g. "Next: Person 2 ↓".
+  final Widget? keyboardBar;
 
   const WizardPage({
     super.key,
@@ -34,6 +37,7 @@ class WizardPage extends ConsumerWidget {
     this.onPrimary,
     this.showBack = true,
     this.centered = false,
+    this.keyboardBar,
   });
 
   @override
@@ -43,6 +47,8 @@ class WizardPage extends ConsumerWidget {
     final w = ref.watch(wizardProvider);
     final bottom = MediaQuery.of(context).padding.bottom;
     final canBack = showBack && w.canGoBack;
+    // On the web preview there's no on-screen keyboard, so the bar shows while a field is focused.
+    final keyboardOpen = View.of(context).viewInsets.bottom > 0 || kIsWeb;
 
     return Column(children: [
       Expanded(
@@ -64,7 +70,9 @@ class WizardPage extends ConsumerWidget {
           ],
         ),
       ),
-      if (canBack || primaryLabel != null)
+      if (keyboardOpen && keyboardBar != null)
+        keyboardBar!
+      else if (canBack || primaryLabel != null)
         Container(
           padding: EdgeInsets.fromLTRB(16, 10, 16, 12 + bottom),
           decoration: BoxDecoration(
@@ -295,6 +303,44 @@ class WCard extends StatelessWidget {
       decoration: BoxDecoration(color: p.surface, borderRadius: BorderRadius.circular(14)),
       child: child,
     );
+  }
+}
+
+/// Bar on top of the keyboard: optional grey text on the left, blue "Next: … ↓" on the right.
+class KeyboardNextBar extends StatelessWidget {
+  final String? left;
+  final String label;
+  final VoidCallback onTap;
+  const KeyboardNextBar({super.key, this.left, required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    final p = Palette.of(context);
+    // TextFieldTapRegion: tapping the bar doesn't count as "tapping outside" the field.
+    return TextFieldTapRegion(child: Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: p.barBg,
+        border: Border(top: BorderSide(color: p.separator.withValues(alpha: .5), width: .5)),
+      ),
+      child: Row(children: [
+        Expanded(child: Text(left ?? '', maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14, color: p.secondary))),
+        Semantics(button: true, label: label, excludeSemantics: true,
+          child: GestureDetector(
+            // Tap down keeps the text field from losing focus before we move it.
+            onTap: () { HapticFeedback.selectionClick(); onTap(); },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              decoration: BoxDecoration(
+                color: p.accent,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [BoxShadow(color: p.accent.withValues(alpha: .45), blurRadius: 14)],
+              ),
+              child: Text(label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+            ),
+          )),
+      ]),
+    ));
   }
 }
 

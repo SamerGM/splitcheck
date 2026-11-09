@@ -13,6 +13,7 @@ import '../../core/services/settings_provider.dart';
 import '../../core/utils/countries.dart';
 import '../../core/utils/currency.dart';
 import '../../core/utils/number_parser.dart';
+import '../../core/utils/strings.dart';
 import '../../shared/theme/app_theme.dart';
 import '../../shared/widgets/apple_widgets.dart';
 import '../../shared/widgets/voice_field.dart';
@@ -340,7 +341,25 @@ class _NamesPageState extends ConsumerState<NamesPage> {
   // Keyboard "Next" jumps from one name to the next.
   final _meFocus = FocusNode();
   final Map<TextEditingController, FocusNode> _focus = {};
-  FocusNode _f(TextEditingController c) => _focus.putIfAbsent(c, FocusNode.new);
+  FocusNode _f(TextEditingController c) =>
+      _focus.putIfAbsent(c, () => FocusNode()..addListener(_onFocus));
+  void _onFocus() { if (mounted) setState(() {}); }
+
+  /// "Next: Person 2 ↓" on top of the keyboard while a name field is focused.
+  Widget? _keyboardBar(S s) {
+    int? at;
+    if (_meFocus.hasFocus) at = -1;
+    for (var i = 0; i < _rows.length; i++) { if (_focus[_rows[i]]?.hasFocus ?? false) at = i; }
+    if (at == null) return null;
+    final i = at;
+    final next = i + 1;
+    final left = i < 0 ? s.yourName : s.personOfN(i + 1, _rows.length);
+    if (next >= _rows.length) {
+      return KeyboardNextBar(left: left, label: s.doneCheck, onTap: () => FocusScope.of(context).unfocus());
+    }
+    final who = _rows[next].text.trim().isEmpty ? s.personN(next + 1) : _rows[next].text.trim();
+    return KeyboardNextBar(left: left, label: s.nextTo('$who ↓'), onTap: () => _nextFrom(i));
+  }
 
   /// Next on the keyboard: go to the next person's field; on the last one, close the keyboard.
   void _nextFrom(int i) {
@@ -357,6 +376,7 @@ class _NamesPageState extends ConsumerState<NamesPage> {
     super.initState();
     final myName = ref.read(myNameProvider);
     _me = TextEditingController(text: myName);
+    _meFocus.addListener(_onFocus);
     final names = [...ref.read(wizardProvider.notifier).pendingNames];
     if (myName.isNotEmpty) {
       // You're in the list (count page adds you first, or editing / a group with you in it).
@@ -490,6 +510,7 @@ class _NamesPageState extends ConsumerState<NamesPage> {
     return WizardPage(
       title: s.whoSplitting,
       subtitle: s.namesHint,
+      keyboardBar: _keyboardBar(s),
       primaryLabel: s.continueBtn,
       onPrimary: () { _rememberMyName(); ref.read(wizardProvider.notifier).confirmNames(_names); },
       children: [

@@ -83,10 +83,12 @@ class WizardScreen extends ConsumerWidget {
             child: SizedBox(
               height: 52,
               child: Stack(children: [
-                Positioned.fill(child: IgnorePointer(child: Center(
-                  child: Text(n == 0 ? s.appName : s.stepOf(n, WizardController.totalSteps),
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.secondary)),
-                ))),
+                // No "Step 3 of 8" — the progress line below is enough.
+                if (n == 0)
+                  Positioned.fill(child: IgnorePointer(child: Center(
+                    child: Text(s.appName,
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: p.secondary)),
+                  ))),
                 Row(children: [
                   CupertinoButton(
                     padding: const EdgeInsets.symmetric(horizontal: 14),

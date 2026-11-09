@@ -331,6 +331,13 @@ class S {
   String get priceLabel => _t('Price', 'السعر');
   String get whoShared => _t('Who shared it?', 'مين شارك فيه؟');
   String splitBetween(String names, String each) => _t('Split between $names · $each each', 'متقسم على $names · $each لكل واحد');
+  String nextTo(String what) => _t('Next: $what', 'التالي: $what');
+  String get doneCheck => _t('Done ✓', 'تم ✓');
+  String get whosPaying => _t('Who’s paying?', 'مين هيدفع؟');
+  String whosPayingFor(String item) => _t('Who’s paying for $item?', 'مين هيدفع $item؟');
+  String pickWhoHint(String amt) => _t('$amt · pick Everyone or tick people', '$amt · اختار الكل أو علّم على الأشخاص');
+  String eachAmt(String amt) => _t('$amt each', '$amt لكل واحد');
+  String personOfN(int i, int n) => _t('Person $i of $n', 'شخص ${toArabicDigits('$i')} من ${toArabicDigits('$n')}');
   String get fillItem => _t('Add a name, a price and who shared it', 'اكتب الاسم والسعر ومين شارك فيه');
   String get yourItems => _t('Your items', 'أصنافك');
   String itemsTotal(int n, String amt) => _t('$n item${n == 1 ? '' : 's'} · $amt', '${toArabicDigits('$n')} أصناف · $amt');

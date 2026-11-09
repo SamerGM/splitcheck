@@ -14,6 +14,7 @@ import '../../core/utils/currency.dart';
 import '../../core/utils/number_parser.dart';
 import '../../core/utils/strings.dart';
 import '../../shared/theme/app_theme.dart';
+import '../../shared/widgets/apple_widgets.dart';
 import '../../shared/widgets/voice_field.dart';
 import 'wizard_controller.dart';
 import 'wizard_widgets.dart';
@@ -153,11 +154,14 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
   final _name = TextEditingController();
   final _price = TextEditingController();
   final _priceFocus = FocusNode();
+  final _nameFocus = FocusNode();
   late Set<String> _who;
 
   @override
   void initState() {
     super.initState();
+    _nameFocus.addListener(_refresh);
+    _priceFocus.addListener(_refresh);
     final ctl = ref.read(wizardProvider.notifier);
     final people = ctl.draft.people.map((p) => p.id).toList();
     final it = ctl.itemAt(widget.index);
@@ -172,7 +176,84 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
   }
 
   @override
-  void dispose() { _name.dispose(); _price.dispose(); _priceFocus.dispose(); super.dispose(); }
+  void dispose() {
+    _name.dispose(); _price.dispose(); _priceFocus.dispose(); _nameFocus.dispose();
+    super.dispose();
+  }
+
+  /// Price done → close the keyboard and ask who's paying.
+  Future<void> _askWho() async {
+    FocusScope.of(context).unfocus();
+    final s = ref.read(stringsProvider);
+    final people = ref.read(billDraftProvider).people;
+    if (people.isEmpty) return;
+    final price = _priceValue;
+    final name = _name.text.trim().isEmpty ? s.whatOrdered : _name.text.trim();
+    final picked = {..._who};
+    final res = await showAppleSheet<Set<String>>(
+      context: context,
+      title: _name.text.trim().isEmpty ? s.whosPaying : s.whosPayingFor(name),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
+        final p = Palette.of(ctx);
+        final all = picked.length == people.length;
+        String each(int n) => price == null || n == 0 ? '' : s.eachAmt(fmtMoney(ref, price / n));
+        Widget row({required Widget avatar, required String title, String? sub, required bool on, required VoidCallback tap}) =>
+          Semantics(button: true, selected: on, label: title, excludeSemantics: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () { HapticFeedback.selectionClick(); setSt(tap); },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                child: Row(children: [
+                  avatar,
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(title, style: TextStyle(fontSize: 17, color: p.label)),
+                    if (sub != null && sub.isNotEmpty) Text(sub, style: TextStyle(fontSize: 13, color: p.secondary)),
+                  ])),
+                  Icon(on ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+                      color: on ? p.green : p.tertiary, size: 26),
+                ]),
+              ),
+            ));
+        final names = [for (final x in people) if (picked.contains(x.id)) x.name].join(s.isAr ? '، ' : ' & ');
+        return Column(mainAxisSize: MainAxisSize.min, children: [
+          if (price != null)
+            Text(s.pickWhoHint(fmtMoney(ref, price)), textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: p.secondary)),
+          const SizedBox(height: 12),
+          Flexible(child: InsetGroup(inSheet: true, scrollable: true, separatorInset: 58, children: [
+            row(
+              avatar: Container(width: 34, height: 34, alignment: Alignment.center,
+                  decoration: BoxDecoration(color: p.fill, shape: BoxShape.circle),
+                  child: const Text('👥', style: TextStyle(fontSize: 17))),
+              title: s.everyone, sub: each(people.length), on: all,
+              tap: () { if (all) { picked.clear(); } else { picked..clear()..addAll(people.map((x) => x.id)); } },
+            ),
+            for (final x in people)
+              row(avatar: Avatar(person: x, size: 34), title: x.name, on: picked.contains(x.id),
+                  tap: () => picked.contains(x.id) ? picked.remove(x.id) : picked.add(x.id)),
+          ])),
+          if (picked.isNotEmpty && !all && price != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('$names · ${each(picked.length)}', textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: p.secondary)),
+            ),
+          const SizedBox(height: 12),
+          AppleButton(label: s.confirm, onTap: picked.isEmpty ? null : () => Navigator.pop(ctx, {...picked})),
+        ]);
+      }),
+    );
+    // The sheet hands focus back to the price field when it closes — drop it so
+    // the keyboard stays shut and the "Next item" footer shows.
+    void drop() { _priceFocus.unfocus(); _nameFocus.unfocus(); FocusManager.instance.primaryFocus?.unfocus(); }
+    drop();
+    WidgetsBinding.instance.addPostFrameCallback((_) => drop());
+    if (res != null && mounted) setState(() => _who = res);
+  }
+
+  void _refresh() { if (mounted) setState(() {}); }
 
   double? get _priceValue {
     final v = double.tryParse(normalizeDigits(_price.text.trim()).replaceAll(',', '.'));
@@ -214,6 +295,11 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
     }
 
     return WizardPage(
+      keyboardBar: _nameFocus.hasFocus
+          ? KeyboardNextBar(label: s.nextTo('${s.priceLabel} ↓'), onTap: () => _priceFocus.requestFocus())
+          : _priceFocus.hasFocus
+              ? KeyboardNextBar(label: s.nextTo('${s.whosPaying} ↓'), onTap: _askWho)
+              : null,
       eyebrow: s.itemXofY(widget.index + 1, w.itemTotal < widget.index + 1 ? widget.index + 1 : w.itemTotal),
       title: s.whatOrdered,
       primaryLabel: single ? s.saveBtn : (widget.index + 1 >= w.itemTotal ? s.continueBtn : s.nextItem),
@@ -222,6 +308,7 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
       children: [
         SectionLabel(s.editName),
         VoiceField(controller: _name, placeholder: s.whatOrdered, onChanged: (_) => setState(() {}),
+            focusNode: _nameFocus,
             textInputAction: TextInputAction.next, onSubmitted: (_) => _priceFocus.requestFocus()),
         const SizedBox(height: 10),
         Wrap(spacing: 8, runSpacing: 8, children: [
@@ -234,7 +321,7 @@ class _ItemEntryPageState extends ConsumerState<ItemEntryPage> {
         ]),
         SectionLabel(s.priceLabel),
         VoiceField(controller: _price, placeholder: '0', numeric: true, focusNode: _priceFocus,
-            textInputAction: TextInputAction.done,
+            textInputAction: TextInputAction.next, onSubmitted: (_) => _askWho(),
             prefixText: currencySymbol(ref.watch(currencyProvider), arabic: s.isAr), onChanged: (_) => setState(() {})),
         SectionLabel(s.whoShared),
         Wrap(spacing: 8, runSpacing: 8, children: [
