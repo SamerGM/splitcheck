@@ -54,7 +54,7 @@ jobs:
         run: flutter pub get
 
       - name: Build AAB
-        run: flutter build appbundle --release --dart-define=GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
+        run: flutter build appbundle --release --obfuscate --split-debug-info=build/symbols --dart-define=GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
 
       - name: Rename AAB
         run: |
@@ -70,7 +70,7 @@ jobs:
 
       # Installable APK for testing on a phone (signed with the same release key)
       - name: Build APK
-        run: flutter build apk --release --dart-define=GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
+        run: flutter build apk --release --obfuscate --split-debug-info=build/symbols --dart-define=GOOGLE_VISION_API_KEY=${{ secrets.GOOGLE_VISION_API_KEY }}
 
       - name: Rename APK
         run: |

@@ -26,6 +26,9 @@ class OcrResult {
 class OcrService {
   final _recognizer = TextRecognizer(script: TextRecognitionScript.latin);
   static const String _apiKey = String.fromEnvironment('GOOGLE_VISION_API_KEY');
+  // Package name and SHA-1 of the release signing certificate (public values).
+  static const String _androidPackage = 'com.samer.splitcheck';
+  static const String _androidCertSha1 = '86266A26964B41AE1990421F5E649EE94321F7ED';
 
   Future<OcrResult> scanReceipt(File imageFile) async {
     // Preprocess image
@@ -61,7 +64,13 @@ class OcrService {
 
     final response = await http.post(
       Uri.parse('https://vision.googleapis.com/v1/images:annotate?key=$_apiKey'),
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        // Lets the API key be restricted to this Android app in Google Cloud
+        // (Credentials → Application restrictions → Android apps).
+        'X-Android-Package': _androidPackage,
+        'X-Android-Cert': _androidCertSha1,
+      },
       body: jsonEncode({
         'requests': [{
           'image': {'content': base64Image},

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Internet (not needed for Phase 1 but kept for future Cloudflare proxy) -->
+    <!-- Internet: Google Cloud Vision receipt scanning (HTTPS only) -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Voice input -->
@@ -10,12 +10,8 @@
     <!-- Camera for receipt scanning -->
     <uses-permission android:name="android.permission.CAMERA" />
 
-    <!-- Image gallery access — Android 12 and below -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-
-    <!-- Image gallery access — Android 13+ -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- No storage / photo permissions: picking a receipt from the gallery uses
+         the system photo picker, which grants access only to the chosen photo. -->
 
     <application
         android:label="SplitCheck"
