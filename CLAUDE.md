@@ -11,6 +11,7 @@ Work branch: `claude/eager-faraday-nd03um` (commit + push there; no PRs unless a
 - After building: real-app screenshots (Flutter web build + Playwright), commit, push,
   trigger the CI build, verify the APK, give the link.
 - APK link (always the same): https://github.com/SamerGM/splitcheck/releases/download/test-latest/splitcheck-test.apk
+- Releases are named by app version: "Split Check v<pubspec version> (build N)", tag `v<version>-buildN`, APK `splitcheck-v<version>-buildN.apk`. Bump `version:` in pubspec.yaml for v1.1 etc.
 - CI: GitHub Actions workflow `build.yml` (workflow_dispatch on the branch, ~7 min).
   Trigger with the GitHub MCP `actions_run_trigger`; check with `actions_list`.
   Verify by downloading the APK (strings in `lib/arm64-v8a/libapp.so`; non-ASCII

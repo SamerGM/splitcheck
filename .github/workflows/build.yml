@@ -50,6 +50,8 @@ jobs:
           NEW_CODE=${{ github.run_number }}
           sed -i "s/version: .*/version: $BASE+$NEW_CODE/" pubspec.yaml
           echo "New version: $BASE+$NEW_CODE"
+          echo "APP_VERSION=$BASE" >> $GITHUB_ENV
+          echo "BUILD_NAME=splitcheck-v$BASE-build$NEW_CODE" >> $GITHUB_ENV
       - name: Get dependencies
         run: flutter pub get
 
@@ -58,15 +60,15 @@ jobs:
 
       - name: Rename AAB
         run: |
-          mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/splitcheck-v1.0-build${{ github.run_number }}.aab
+          mv build/app/outputs/bundle/release/app-release.aab build/app/outputs/bundle/release/${{ env.BUILD_NAME }}.aab
           ls -lh build/app/outputs/bundle/release/
-          echo "AAB ready: splitcheck-v1.0-build${{ github.run_number }}.aab" 
+          echo "AAB ready: ${{ env.BUILD_NAME }}.aab" 
 
       - name: Upload AAB
         uses: actions/upload-artifact@v6
         with:
-          name: splitcheck-v1.0-build${{ github.run_number }}
-          path: build/app/outputs/bundle/release/splitcheck-v1.0-build${{ github.run_number }}.aab
+          name: ${{ env.BUILD_NAME }}
+          path: build/app/outputs/bundle/release/${{ env.BUILD_NAME }}.aab
 
       # Installable APK for testing on a phone (signed with the same release key)
       - name: Build APK
@@ -74,27 +76,29 @@ jobs:
 
       - name: Rename APK
         run: |
-          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/splitcheck-v1.0-build${{ github.run_number }}.apk
+          mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/${{ env.BUILD_NAME }}.apk
           ls -lh build/app/outputs/flutter-apk/
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:
-          name: splitcheck-v1.0-build${{ github.run_number }}-apk
-          path: build/app/outputs/flutter-apk/splitcheck-v1.0-build${{ github.run_number }}.apk
+          name: ${{ env.BUILD_NAME }}-apk
+          path: build/app/outputs/flutter-apk/${{ env.BUILD_NAME }}.apk
 
       # Direct download link for phones: publish the APK as a release file.
-      # Each build gets its own pre-release, and "test-latest" always points at the newest one:
+      # Each build gets its own pre-release named by app version, e.g. "Split Check v1.0.0 (build 65)",
+      # and "test-latest" always points at the newest one:
       #   https://github.com/<owner>/<repo>/releases/download/test-latest/splitcheck-test.apk
       - name: Publish test APK (direct link)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK=build/app/outputs/flutter-apk/splitcheck-v1.0-build${{ github.run_number }}.apk
+          APK=build/app/outputs/flutter-apk/${BUILD_NAME}.apk
           cp "$APK" splitcheck-test.apk
-          NOTES="Test build ${{ github.run_number }} from ${{ github.ref_name }} (${GITHUB_SHA::7})"
-          gh release create "test-build-${{ github.run_number }}" "$APK" --prerelease \
-            --target "$GITHUB_SHA" --title "Test build ${{ github.run_number }}" --notes "$NOTES"
+          TITLE="Split Check v${APP_VERSION} (build ${{ github.run_number }})"
+          NOTES="${TITLE} from ${{ github.ref_name }} (${GITHUB_SHA::7})"
+          gh release create "v${APP_VERSION}-build${{ github.run_number }}" "$APK" --prerelease \
+            --target "$GITHUB_SHA" --title "$TITLE" --notes "$NOTES"
           gh release delete test-latest --yes --cleanup-tag || true
           gh release create test-latest splitcheck-test.apk --prerelease \
-            --target "$GITHUB_SHA" --title "Latest test build" --notes "$NOTES"
+            --target "$GITHUB_SHA" --title "Latest test build: ${TITLE}" --notes "$NOTES"
