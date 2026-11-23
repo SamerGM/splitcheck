@@ -51,7 +51,7 @@ jobs:
           sed -i "s/version: .*/version: $BASE+$NEW_CODE/" pubspec.yaml
           echo "New version: $BASE+$NEW_CODE"
           echo "APP_VERSION=$BASE" >> $GITHUB_ENV
-          echo "BUILD_NAME=Split-Check-v$BASE" >> $GITHUB_ENV
+          echo "BUILD_NAME=SplitCheck-v$BASE" >> $GITHUB_ENV
       - name: Get dependencies
         run: flutter pub get
 
